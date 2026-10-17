@@ -362,7 +362,7 @@ function paginate() {
     st.textContent = 'عدد الصفحات: ' + r.n + (bestS > 1.001 ? ' — تكبير الخط تلقائياً ×' + bestS.toFixed(2) : '') +
       (okw ? ' — ✔ تم التحقق: كل الكلمات (' + got + ') موجودة في الصفحات' : ' — ⚠ تنبيه: عدد الكلمات في الصفحات (' + got + ') لا يطابق المصدر (' + exp + ')') +
       (r.fits ? '' : ' — كتلة التوقيع أطول من صفحة.') +
-      (aiNote ? ' — ' + aiNote : (aiState && aiState.key === d.body.split('\n').map(clean).filter(Boolean).join('\n') ? ' — 🤖 تنسيق بالذكاء الاصطناعي' : ''));
+      (aiNote ? ' — ' + aiNote : (aiState && aiState.key === d.body.split('\n').map(clean).filter(Boolean).join('\n') ? ' — 🤖 تنسيق بالذكاء الاصطناعي' + (window.lastAIProvider ? ' (' + window.lastAIProvider + ')' : '') : ''));
     var cnt = {}; lastReport.forEach(function (x) { cnt[x[0]] = (cnt[x[0]] || 0) + 1; });
     var rb = $('repbody'); rb.innerHTML = '';
     lastReport.forEach(function (x) {
@@ -385,14 +385,19 @@ function fitView() {
 }
 
 var aiState = null, aiBusy = false, aiNote = '';
+function hashLines(a) { var s = a.join('\n'), h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + '_' + h; }
 /* الاتصال بالخادم الوسيط (المفتاح السري يبقى في الخادم فقط) */
 var API_SAMPLE = {
   json: async function (prompt) {
     var r;
     try { r = await fetch('/api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt }) }); }
     catch (e) { throw { code: 'network', message: 'تعذّر الاتصال بالخادم' }; }
-    if (!r.ok) throw { code: r.status === 429 ? 'rate_limited' : 'error', message: 'HTTP ' + r.status };
+    if (!r.ok) {
+      var det = ''; try { var ej = await r.json(); det = (ej.detail || ej.error || '') + (ej.status ? ' [' + ej.status + ']' : '') + (ej.model ? ' (' + ej.model + ')' : ''); } catch (e) {}
+      throw { code: r.status === 429 ? 'rate_limited' : 'error', message: 'HTTP ' + r.status + (det ? ' — ' + det : '') };
+    }
     var j = await r.json();
+    window.lastAIProvider = j.provider ? (j.provider + (j.cached ? ' · من الذاكرة' : '')) : '';
     return j.result;
   }
 };
@@ -405,8 +410,10 @@ async function runAI() {
   var sample = null;
   sample = API_SAMPLE;
   if (!sample) { aiNote = 'التحليل الذكي غير متاح هنا — يعمل التصنيف بالقواعد الثابتة.'; paginate(); return; }
+  var ckey = 'memo_ai_' + hashLines(lines);
+  try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.length === lines.length) { aiState = { key: lines.join('\n'), types: cv }; aiNote = ''; window.lastAIProvider = 'من ذاكرة المتصفح'; paginate(); return; } } catch (e) {}
   aiBusy = true; $('b_ai').disabled = true;
-  var types = new Array(lines.length), CH = 110;
+  var types = new Array(lines.length), CH = 300;
   try {
     for (var a = 0; a < lines.length; a += CH) {
       var b = Math.min(lines.length, a + CH);
@@ -439,6 +446,7 @@ async function runAI() {
     }
     for (var k = 0; k < types.length; k++) if (!types[k]) types[k] = 'para';
     aiState = { key: lines.join('\n'), types: types }; aiNote = '';
+    try { localStorage.setItem(ckey, JSON.stringify(types)); } catch (e) {}
   } catch (e) {
     st.className = 'status warn';
     var c = e && e.code;
