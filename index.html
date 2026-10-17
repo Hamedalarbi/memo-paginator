@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>منسّق المذكرات – توزيع تلقائي للصفحات</title>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef0f3;--panel:#fff;--fg:#1d2430;--muted:#5d6877;--line:#d5dae1;--accent:#2563a8;--accent-fg:#fff;--field:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181e;--panel:#1e242d;--fg:#e8ecf1;--muted:#9aa5b4;--line:#323b47;--accent:#5b9bdc;--accent-fg:#0d1117;--field:#161b22}}
+:root[data-theme="dark"]{--bg:#14181e;--panel:#1e242d;--fg:#e8ecf1;--muted:#9aa5b4;--line:#323b47;--accent:#5b9bdc;--accent-fg:#0d1117;--field:#161b22}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:'Amiri','Simplified Arabic','Times New Roman',serif;font-size:17px}
+.app{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:16px;padding:16px;max-width:1300px;margin:0 auto}
+@media (max-width:900px){.app{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;align-self:start}
+.panel h1{font-size:21px;margin:0 0 4px}
+.panel p.hint{color:var(--muted);font-size:14px;margin:0 0 10px;line-height:1.6}
+label{display:block;font-weight:700;margin:10px 0 4px;font-size:15px}
+input[type=text],textarea{width:100%;font-family:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--fg)}
+textarea{resize:vertical;line-height:1.6}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1}
+input[type=range]{width:100%}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button{font-family:inherit;font-size:17px;border-radius:8px;padding:8px 16px;cursor:pointer;border:1px solid var(--accent);background:transparent;color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-fg)}
+.status{margin-top:10px;font-size:14px;color:var(--muted);line-height:1.6}
+.status.warn{color:#c0392b}
+#viewport{display:flex;justify-content:center;overflow:hidden}
+#pages{flex:none;width:210mm;transform-origin:top center}
+
+.paper{background:#fff;color:#000;width:210mm;height:296mm;padding:20px 30px 30px 30px;margin-bottom:24px;box-shadow:0 5px 15px rgba(0,0,0,.25);overflow:hidden;page-break-after:always;break-after:page;font-family:'Amiri','Simplified Arabic','Times New Roman',serif}
+.frame{border:2px solid #2c3e50;border-radius:60px 60px 20px 20px;padding:25px;height:100%;display:flex;flex-direction:column}
+.pbody{flex:1;min-height:0;overflow:hidden;position:relative;margin-bottom:16px}
+.pfoot{flex:none;text-align:left;font-size:15px;color:#666;padding-top:5px;border-top:1px solid #eee}
+.header{text-align:center;border-bottom:2px solid #2c3e50;padding-bottom:5px;margin-bottom:10px}
+.basmala{font-size:26px;font-weight:700;margin-bottom:2px}
+.court{font-size:21px;font-weight:700;color:#2c3e50}
+.ct{font-size:var(--fs);line-height:var(--lh);text-align:justify;margin-bottom:4px}
+.ct.center{text-align:center;font-weight:700}
+.ttl{font-weight:700;font-size:calc(var(--fs)*1.03);text-decoration:underline;text-underline-offset:4px;margin:14px 0 8px;color:#2c3e50;line-height:var(--lh)}
+.li{font-size:var(--fs);line-height:var(--lh);margin-right:15px}
+.sign{margin-top:14px;font-size:calc(var(--fs)*1.05);line-height:var(--lh);text-align:right}
+.sign b{color:#2980b9}.sign .center{text-align:center;color:#4a4a4a;margin-bottom:6px}.sign .sl{font-weight:700}.nm{font-weight:700;color:#2980b9}.li.nm{font-weight:700;color:#2980b9}.ct.bold{font-weight:700}.li b{font-weight:700}
+
+@media print{
+  @page{size:A4;margin:0}
+  :root{padding:0}
+  body{background:#fff}
+  .panel,.noprint{display:none!important}
+  .app{display:block;padding:0;max-width:none}
+  #viewport{display:block;height:auto!important;overflow:visible}
+  #pages{transform:none!important;width:210mm;margin:0 auto}
+  .paper{box-shadow:none;margin:0}
+  .paper:last-child{page-break-after:auto;break-after:auto}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel noprint">
+    <h1>منسّق المذكرات</h1>
+    <p class="hint">الصق نص المذكرة وسيُوزَّع تلقائياً على صفحات A4 بإطار وترقيم، وتُقسَّم الفقرات الطويلة بين الصفحات فلا يضيع أي سطر. اطبع واحفظ كـ PDF.</p>
+    <label for="f_bas">البسملة</label><input type="text" id="f_bas">
+    <label for="f_court">اسم المحكمة / الجهة</label><input type="text" id="f_court">
+    <label for="f_body">نص المذكرة <span style="font-weight:400;color:var(--muted)">(كل سطر = فقرة)</span></label>
+    <textarea id="f_body" rows="14"></textarea>
+    <p class="hint" style="margin-top:4px">يتعرف الموقع تلقائياً على «أولاً/ثانياً…» والبنود المرقمة والموضوع والسلام والختام والتوقيع. وللتحكم اليدوي ضع في أول السطر: <b>#</b> عنوان مسطّر لا يبقى وحده في آخر صفحة، <b>-</b> بند قصير لا ينقسم، <b>&gt;</b> سطر في الوسط بخط عريض.</p>
+    <label for="f_sign">التوقيع (اتركه فارغاً ليُستخرج تلقائياً من آخر النص)</label>
+    <textarea id="f_sign" rows="6"></textarea>
+    <p class="hint" style="margin-top:4px">ضع <b>*</b> قبل الاسم ليظهر بالأزرق العريض.</p>
+    <div class="row">
+      <div><label for="o_size">حجم الخط: <span id="v_size"></span></label><input type="range" id="o_size" min="15" max="22" step="0.5"></div>
+      <div><label for="o_lh">تباعد الأسطر: <span id="v_lh"></span></label><input type="range" id="o_lh" min="1.4" max="2" step="0.05"></div>
+    </div>
+    <label style="font-weight:400"><input type="checkbox" id="o_auto"> ضبط حجم الخط تلقائياً ليسبق التوقيع نص من المذكرة</label>
+    <label style="font-weight:400;margin-top:12px"><input type="checkbox" id="o_ai" checked> تحليل ذكي تلقائي عند لصق النص (يراعي أي أسلوب كتابة، ويعود للقواعد إن تعذّر)</label>
+    <div class="btns">
+      <button id="b_ai">🤖 تحليل ذكي للتنسيق</button>
+      <button class="primary" id="b_print">🖨️ طباعة / حفظ PDF</button>
+      <button id="b_reset">نموذج تجريبي</button>
+    </div>
+    <div class="status" id="status"></div>
+    <details style="margin-top:10px"><summary id="repsum" style="cursor:pointer;font-weight:700">تقرير التصنيف</summary><div id="repbody"></div></details>
+    <p class="hint">عند الطباعة: ورق A4، الهوامش «بدون»، وفعّل «رسومات الخلفية» إن لزم.</p>
+  </div>
+  <div id="viewport"><div id="pages"></div></div>
+</div>
+
+<script>
+var SAMPLE = {
+  bas: 'بسم الله الرحمن الرحيم',
+  court: 'لدى المحكمة الابتدائية',
+  body: '> الموضوع: مذكرة تعقيبية على الرد المقدم من الخصوم\n' +
+    'نتقدم إلى عدالة المحكمة الموقرة بهذه المذكرة، ونوجز التعقيب فيما هو آتٍ:\n' +
+    '# أولاً:\n' +
+    'ضع هنا فقرتك الأولى. الفقرات الطويلة تُقسَّم تلقائياً عند نهاية الصفحة وتكمل في الصفحة التالية دون فقد أي كلمة.\n' +
+    '# ثانياً:\n' +
+    'ضع هنا فقرتك الثانية، ثم أضف ما تشاء من الفقرات والعناوين.\n' +
+    '# الطلبات:\n' +
+    '١) قبول المذكرة شكلاً وموضوعاً.\n' +
+    '٢) الحكم لنا بجميع طلباتنا.\n' +
+    '> وفقكم الله وتولى عونكم،،،',
+  sign: 'مقدم المذكرة:\n*الاسم الأول\n*الاسم الثاني\nعنهم المحامي / *اسم المحامي'
+};
+var $ = function (id) { return document.getElementById(id); };
+var KEY = 'memo_paginator_v1', timer = null;
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(get())); } catch (e) {}
+}
+function load() {
+  try { var s = localStorage.getItem(KEY); if (s) return JSON.parse(s); } catch (e) {}
+  return null;
+}
+function get() {
+  return { bas: $('f_bas').value, court: $('f_court').value, body: $('f_body').value, sign: $('f_sign').value,
+           size: $('o_size').value, lh: $('o_lh').value, auto: $('o_auto').checked };
+}
+function put(d) {
+  $('f_bas').value = d.bas; $('f_court').value = d.court; $('f_body').value = d.body; $('f_sign').value = d.sign;
+  $('o_size').value = d.size || 18.5; $('o_lh').value = d.lh || 1.75; $('o_auto').checked = d.auto !== false;
+}
+
+function mk(cls, text, attrs) {
+  var e = document.createElement('div'); e.className = cls; e.textContent = text;
+  if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function clean(s) { return s.replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').replace(/[ \t\u00a0]+/g, ' ').trim(); }
+function norm(s) {
+  return clean(s).replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+}
+var R = {
+  ord: /^(اولا|ثانيا|ثالثا|رابعا|خامسا|سادسا|سابعا|ثامنا|تاسعا|عاشرا|حادي عشر|ختاما|اخيرا|واخيرا)(\s|[:：\-–.]|$)/,
+  sect: /^(الطلبات( الختاميه| الاحتياطيه| الاصليه)?|طلباتنا|الوقائع|الاسباب|الدفوع|الخاتمه|الملاحظات|الرد|التعقيب|الدفع|المرافعه|الاثبات|الحيثيات|المقدمه)\s*[:：]?$/,
+  subj: /^(الموضوع|موضوع (المذكره|الدعوي|الطعن|الشكوي))\s*[:：]/,
+  addr: /^(صاحب الفضيله|حضره صاحب|حضره القاضي|فضيله|معالي|سعاده|السيد الاستاذ|السلام عليكم)/,
+  close: /^(وفقكم الله|والله ولي التوفيق|وتفضلوا|واقبلوا|وتقبلوا|ولكم جزيل|وشكرا|ودمتم|مع فائق)/,
+  sig: /^(مقدمو|مقدم|مقدمه|وكيل|وكلاء|عنهم|عنه|عنها|المحامي|المحاميه|الوكيل|توقيع|التوقيع|الموقعون|الموقع|وكيله|وكيلهم)(\s|[:：\/]|$)/,
+  bas: /^بسم الله الرحمن الرحيم/,
+  court: /^((لدي|امام)\s.*(محكمه|نيابه|هيئه|مجلس)|(محكمه|نيابه)\s)/,
+  pre: /^([\(\[]?[0-9\u0660-\u0669]{1,3}\s*[\)\]\.\-–:،]|[•●▪·◦■\-–—]|[\(\[]?[ا-ي]\s*[\)\]\-–])\s*(.*)$/
+};
+function wordsOf(s) { return s.split(/\s+/).filter(function (t) { return /[\u0600-\u06FFA-Za-z0-9]/.test(t); }).length; }
+function isName(t) {
+  var m = t.match(R.pre), x = (m ? m[2] : t).replace(/^\*/, '').trim(), w = x ? x.split(' ').length : 0;
+  return w >= 2 && w <= 8 && x.length <= 80 && !/[:：،؛.؟!?()\[\]\d\u0660-\u0669]/.test(x) && !R.ord.test(norm(x)) && !R.close.test(norm(x)) && !R.addr.test(norm(x));
+}
+function liEl(l, name) {
+  var m = l.match(R.pre), e = document.createElement('div'); e.className = 'li';
+  if (name && m) {
+    var a = document.createElement('b'); a.textContent = l.slice(0, l.length - m[2].length).trim();
+    var b = document.createElement('span'); b.className = 'nm'; b.textContent = m[2];
+    e.appendChild(a); e.appendChild(document.createTextNode(' ')); e.appendChild(b); e.setAttribute('data-nosplit', 1);
+  } else if (name) {
+    e.className = 'li nm'; e.textContent = l; e.setAttribute('data-nosplit', 1);
+  } else {
+    e.textContent = l; if (l.length <= 260) e.setAttribute('data-nosplit', 1);
+  }
+  return e;
+}
+var lastReport = [], lastExpected = 0;
+function parseBlocks(d) {
+  var out = [], rep = [], bas = d.bas.trim(), court = d.court.trim();
+  var lines = d.body.split('\n').map(clean).filter(Boolean), extra = 0, tys = null, slt = null;
+  var fb = true, fc = true;
+  var ai = (aiState && aiState.key === lines.join('\n')) ? aiState.types : null;
+  if (ai) {
+    var L2 = [], T2 = [];
+    for (var q = 0; q < lines.length; q++) {
+      var tq = ai[q] || 'para';
+      if (tq === 'cont' && L2.length && T2[T2.length - 1] !== 'bas' && T2[T2.length - 1] !== 'court') L2[L2.length - 1] += ' ' + lines[q];
+      else { L2.push(lines[q]); T2.push(tq === 'cont' ? 'para' : tq); }
+    }
+    lines = L2; tys = T2;
+    var bi = tys.indexOf('bas'); if (bi > -1) { bas = lines[bi]; lines.splice(bi, 1); tys.splice(bi, 1); fb = false; }
+    var ci0 = tys.indexOf('court'); if (ci0 > -1) { court = lines[ci0]; lines.splice(ci0, 1); tys.splice(ci0, 1); fc = false; }
+  } else {
+    if (lines.length && R.bas.test(norm(lines[0]))) { bas = lines.shift(); fb = false; }
+    if (lines.length && R.court.test(norm(lines[0])) && lines[0].length < 120) { court = lines.shift(); fc = false; }
+  }
+  if (fb) extra += wordsOf(bas); if (fc) extra += wordsOf(court);
+  if (d.sign.trim()) extra += wordsOf(d.sign.replace(/\*/g, ''));
+  lastExpected = wordsOf(d.body.replace(/^\s*(#|>)\s/gm, '')) + extra;
+  var sl;
+  if (d.sign.trim()) sl = d.sign.split('\n').map(clean).filter(Boolean);
+  else if (tys) {
+    sl = []; slt = [];
+    for (var z = 0; z < lines.length;) {
+      if (/^sign/.test(tys[z])) { sl.push(lines[z]); slt.push(tys[z]); lines.splice(z, 1); tys.splice(z, 1); } else z++;
+    }
+    while (sl.length && lines.length && tys[tys.length - 1] === 'closing') { sl.unshift(lines.pop()); slt.unshift('closing'); tys.pop(); }
+  } else {
+    sl = [];
+    var from = Math.max(0, lines.length - 18);
+    for (var i = from; i < lines.length; i++) {
+      if (R.sig.test(norm(lines[i]))) {
+        var ok = true;
+        for (var j = i; j < lines.length; j++) if (lines[j].length > 100) { ok = false; break; }
+        if (ok) { sl = lines.splice(i); break; }
+      }
+    }
+    if (sl.length && lines.length && R.close.test(norm(lines[lines.length - 1])) && lines[lines.length - 1].length < 140) sl.unshift(lines.pop());
+  }
+  if (bas || court) {
+    var h = mk('header', '', { 'data-nosplit': 1 });
+    if (bas) h.appendChild(mk('basmala', bas));
+    if (court) h.appendChild(mk('court', court));
+    out.push(h); rep.push(['ترويسة', bas + ' ' + court]);
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i], n = norm(l), mm;
+    if (l.indexOf('# ') === 0) { out.push(mk('ttl', l.slice(2), { 'data-keep': 1 })); rep.push(['عنوان', l.slice(2)]); continue; }
+    if (l.indexOf('> ') === 0) { out.push(mk('ct center', l.slice(2), { 'data-nosplit': 1 })); rep.push(['وسط', l.slice(2)]); continue; }
+    if (tys) {
+      var ty = tys[i];
+      if (ty === 'heading') { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['🤖 عنوان', l]); continue; }
+      if (ty === 'subject') {
+        var c1 = l.search(/[:：]/), e1 = mk('ct', '', { 'data-nosplit': 1 });
+        if (c1 > -1 && c1 <= 40) { var b1 = document.createElement('b'); b1.textContent = l.slice(0, c1 + 1); e1.appendChild(b1); e1.appendChild(document.createTextNode(' ' + l.slice(c1 + 1).trim())); }
+        else { e1.textContent = l; e1.style.fontWeight = '700'; }
+        out.push(e1); rep.push(['🤖 موضوع', l]); continue;
+      }
+      if (ty === 'center' || ty === 'address' || ty === 'closing') { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['🤖 وسط', l]); continue; }
+      if (ty === 'item') { out.push(liEl(l, false)); rep.push(['🤖 بند', l]); continue; }
+      if (ty === 'names_label') { out.push(l.length <= 160 ? mk('ct bold', l, { 'data-nosplit': 1, 'data-keep': 1 }) : mk('ct', l)); rep.push(['🤖 عنوان قائمة', l]); continue; }
+      if (ty === 'name') { out.push(liEl(l, true)); rep.push(['🤖 اسم', l]); continue; }
+      out.push(mk('ct', l)); continue;
+    }
+    if (R.subj.test(n) && l.length < 240) {
+      var c = l.search(/[:：]/), e = mk('ct', '', { 'data-nosplit': 1 }), bb = document.createElement('b');
+      bb.textContent = l.slice(0, c + 1); e.appendChild(bb); e.appendChild(document.createTextNode(' ' + l.slice(c + 1).trim()));
+      out.push(e); rep.push(['موضوع', l]); continue;
+    }
+    if (R.ord.test(n)) {
+      var ci = l.search(/[:：]/);
+      if (l.length <= 110) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); continue; }
+      if (ci > -1 && ci <= 40) {
+        out.push(mk('ttl', l.slice(0, ci + 1), { 'data-keep': 1 })); rep.push(['عنوان', l.slice(0, ci + 1)]);
+        out.push(mk('ct', l.slice(ci + 1).trim())); continue;
+      }
+    }
+    if (R.sect.test(n)) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); continue; }
+    if (R.addr.test(n) && l.length < 160) { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['وسط', l]); continue; }
+    if (R.close.test(n) && l.length < 140) { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['ختام', l]); continue; }
+    if (/[:：]$/.test(l)) {
+      var j2 = i + 1; while (j2 < lines.length && isName(lines[j2])) j2++;
+      if (j2 - i - 1 >= 2) {
+        out.push(l.length <= 100 ? mk('ct bold', l, { 'data-nosplit': 1, 'data-keep': 1 }) : mk('ct', l));
+        rep.push(['قائمة أسماء', l]);
+        for (var k = i + 1; k < j2; k++) out.push(liEl(lines[k], true));
+        i = j2 - 1; continue;
+      }
+    }
+    if (R.pre.test(l) && (l.indexOf('- ') === 0 ? true : true)) {
+      var txt = (l.indexOf('- ') === 0 && /^-\s+[\u0660-\u0669\d]/.test(l)) ? l.slice(2) : l;
+      out.push(liEl(txt, false)); rep.push(['بند', txt]); continue;
+    }
+    out.push(mk('ct', l));
+  }
+  if (sl.length) {
+    var s = mk('sign', '', { 'data-nosplit': 1, 'data-tail': 1 });
+    sl.forEach(function (x, ix) {
+      var line = document.createElement('div'), t = x, nx = norm(t), sty = slt ? slt[ix] : null;
+      if (sty === 'closing') { line.className = 'center'; line.textContent = t; }
+      else if (sty === 'sign_label') { line.className = 'sl'; line.textContent = t; }
+      else if (sty === 'sign_name') { var bn = document.createElement('b'); bn.textContent = t; line.appendChild(bn); }
+      else if (R.close.test(nx)) { line.className = 'center'; line.textContent = t; }
+      else if (t.indexOf('*') !== -1) {
+        var p = t.indexOf('*'); if (p > 0) line.appendChild(document.createTextNode(t.slice(0, p)));
+        var b = document.createElement('b'); b.textContent = t.slice(p + 1).trim(); line.appendChild(b);
+      } else if (R.sig.test(nx) && /[\/]/.test(t) && t.split('/')[1].trim()) {
+        var q = t.indexOf('/'); line.appendChild(document.createTextNode(t.slice(0, q + 1) + ' '));
+        var b2 = document.createElement('b'); b2.textContent = t.slice(q + 1).trim(); line.appendChild(b2);
+      } else if (/[:：]$/.test(t) || R.sig.test(nx)) { line.className = 'sl'; line.textContent = t; }
+      else if (isName(t)) { var b3 = document.createElement('b'); b3.textContent = t; line.appendChild(b3); }
+      else line.textContent = t;
+      s.appendChild(line);
+    });
+    out.push(s); rep.push(['توقيع', sl.join(' | ')]);
+  }
+  lastReport = rep;
+  return out;
+}
+
+function build(d, scale) {
+  var pagesEl = $('pages');
+  pagesEl.innerHTML = '';
+  pagesEl.style.setProperty('--fs', (parseFloat(d.size) * scale).toFixed(2) + 'px');
+  pagesEl.style.setProperty('--lh', d.lh);
+  var cur = null;
+  function newPage() {
+    var p = document.createElement('div'); p.className = 'paper';
+    p.innerHTML = '<div class="frame"><div class="pbody"></div><div class="pfoot">صفحة | 0</div></div>';
+    pagesEl.appendChild(p); cur = p.querySelector('.pbody');
+  }
+  function over() { var l = cur.lastElementChild; return l ? (l.offsetTop + l.offsetHeight) > cur.clientHeight - 2 : false; }
+  function toNext(el) {
+    cur.removeChild(el);
+    var last = cur.lastElementChild, keep = [];
+    while (last && last.hasAttribute('data-keep') && cur.children.length > 1) { keep.unshift(last); cur.removeChild(last); last = cur.lastElementChild; }
+    newPage(); keep.forEach(function (k) { cur.appendChild(k); }); cur.appendChild(el);
+  }
+  function place(el) {
+    cur.appendChild(el);
+    if (!over()) return;
+    var splittable = !el.hasAttribute('data-nosplit') && !el.hasAttribute('data-keep') && el.children.length === 0;
+    if (splittable) {
+      var words = el.textContent.trim().split(/\s+/), lo = 0, hi = words.length - 1;
+      while (lo < hi) {
+        var mid = Math.ceil((lo + hi) / 2);
+        el.textContent = words.slice(0, mid).join(' ');
+        if (over()) hi = mid - 1; else lo = mid;
+      }
+      if (lo >= 6) {
+        el.textContent = words.slice(0, lo).join(' ');
+        var rest = mk(el.className, words.slice(lo).join(' '), { style: 'margin-top:0' });
+        newPage(); place(rest); return;
+      }
+      el.textContent = words.join(' ');
+    }
+    toNext(el);
+  }
+  newPage();
+  parseBlocks(d).forEach(place);
+  var pages = pagesEl.querySelectorAll('.paper');
+  pages.forEach(function (p, i) { p.querySelector('.pfoot').textContent = 'صفحة | ' + (i + 1); });
+  var tail = pagesEl.querySelector('[data-tail]'), before = -1, fits = true;
+  if (tail) {
+    before = tail.offsetTop;
+    var lc = tail.parentNode.lastElementChild;
+    fits = (lc.offsetTop + lc.offsetHeight) <= tail.parentNode.clientHeight - 2;
+  }
+  return { n: pages.length, tail: !!tail, before: before, fits: fits };
+}
+
+function paginate() {
+  var st = $('status');
+  try {
+    var d = get(), best = null, bestS = 1, r;
+    if (d.auto) {
+      for (var s = 1.0; s <= 1.2001; s += 0.02) {
+        r = build(d, s);
+        if (!r.tail) break;
+        if (r.fits && r.before >= 150) { best = r; bestS = s; break; }
+        if (r.fits && (!best || r.before > best.before)) { best = r; bestS = s; }
+      }
+    }
+    r = build(d, bestS);
+    var got = 0;
+    document.querySelectorAll('#pages .pbody > *').forEach(function (e) { got += wordsOf(e.innerText); });
+    var exp = lastExpected;
+    var okw = got === exp;
+    st.className = 'status' + ((r.fits && okw && !aiNote) ? '' : ' warn');
+    st.textContent = 'عدد الصفحات: ' + r.n + (bestS > 1.001 ? ' — تكبير الخط تلقائياً ×' + bestS.toFixed(2) : '') +
+      (okw ? ' — ✔ تم التحقق: كل الكلمات (' + got + ') موجودة في الصفحات' : ' — ⚠ تنبيه: عدد الكلمات في الصفحات (' + got + ') لا يطابق المصدر (' + exp + ')') +
+      (r.fits ? '' : ' — كتلة التوقيع أطول من صفحة.') +
+      (aiNote ? ' — ' + aiNote : (aiState && aiState.key === d.body.split('\n').map(clean).filter(Boolean).join('\n') ? ' — 🤖 تنسيق بالذكاء الاصطناعي' : ''));
+    var cnt = {}; lastReport.forEach(function (x) { cnt[x[0]] = (cnt[x[0]] || 0) + 1; });
+    var rb = $('repbody'); rb.innerHTML = '';
+    lastReport.forEach(function (x) {
+      var row = document.createElement('div'); row.style.cssText = 'font-size:14px;line-height:1.6;border-bottom:1px solid var(--line);padding:2px 0';
+      var tg = document.createElement('b'); tg.textContent = x[0] + ': '; tg.style.color = 'var(--accent)';
+      row.appendChild(tg); row.appendChild(document.createTextNode(x[1].length > 70 ? x[1].slice(0, 70) + '…' : x[1])); rb.appendChild(row);
+    });
+    $('repsum').textContent = 'تقرير التصنيف (' + lastReport.length + ' عنصر مميَّز)';
+    fitView();
+  } catch (err) {
+    st.className = 'status warn'; st.textContent = 'تعذّر التوزيع: ' + err.message;
+  }
+}
+function fitView() {
+  var vp = $('viewport'), pg = $('pages');
+  pg.style.transform = 'none'; vp.style.height = 'auto';
+  var w = vp.clientWidth, full = pg.offsetWidth, k = Math.min(1, (w - 4) / full);
+  pg.style.transform = 'scale(' + k + ')';
+  vp.style.height = (pg.offsetHeight * k) + 'px';
+}
+
+var aiState = null, aiBusy = false, aiNote = '';
+/* الاتصال بالخادم الوسيط (المفتاح السري يبقى في الخادم فقط) */
+var API_SAMPLE = {
+  json: async function (prompt) {
+    var r;
+    try { r = await fetch('/api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt }) }); }
+    catch (e) { throw { code: 'network', message: 'تعذّر الاتصال بالخادم' }; }
+    if (!r.ok) throw { code: r.status === 429 ? 'rate_limited' : 'error', message: 'HTTP ' + r.status };
+    var j = await r.json();
+    return j.result;
+  }
+};
+var AI_TYPES = ['bas','court','subject','heading','center','address','closing','item','names_label','name','para','cont','sign_label','sign_name','sign_line'];
+async function runAI() {
+  var st = $('status');
+  if (aiBusy) return;
+  var d = get(), lines = d.body.split('\n').map(clean).filter(Boolean);
+  if (!lines.length) return;
+  var sample = null;
+  sample = API_SAMPLE;
+  if (!sample) { aiNote = 'التحليل الذكي غير متاح هنا — يعمل التصنيف بالقواعد الثابتة.'; paginate(); return; }
+  aiBusy = true; $('b_ai').disabled = true;
+  var types = new Array(lines.length), CH = 110;
+  try {
+    for (var a = 0; a < lines.length; a += CH) {
+      var b = Math.min(lines.length, a + CH);
+      st.className = 'status'; st.textContent = '🤖 جارٍ تحليل بنية المذكرة… (' + b + ' / ' + lines.length + ')';
+      var rows = [];
+      for (var i = a; i < b; i++) {
+        var t = lines[i], view = t.length > 190 ? t.slice(0, 130) + ' … ' + t.slice(-45) : t;
+        rows.push(i + ' [' + t.length + '] ' + view);
+      }
+      var prompt = 'أنت مصنِّف لبنية المستندات القانونية والرسمية (مذكرات، لوائح، شكاوى، عقود…) بأي أسلوب كتابة وبأي لغة.\n' +
+        'أمامك أسطر مستند مرقّمة (' + a + ' إلى ' + (b - 1) + ' من أصل ' + lines.length + ' سطراً). الرقم ثم [طول السطر] ثم السطر (الطويل مقتطع من وسطه).\n' +
+        'مهمتك الوحيدة: تحديد نوع كل سطر بحسب وظيفته في المستند، دون إعادة كتابة أي نص.\n' +
+        'الأنواع المسموحة فقط:\n' +
+        'bas = البسملة؛ court = سطر الجهة/المحكمة المخاطَبة في الترويسة؛ subject = سطر الموضوع؛\n' +
+        'heading = عنوان قسم أو ترقيم قسم (مثل: أولاً / ثانياً / الطلبات / الوقائع / أسباب الطعن)، قصير ويسبق فقرات؛\n' +
+        'center = سطر يُوضع في الوسط (تحية، عبارة تقديم قصيرة)؛ address = توجيه الخطاب للقاضي أو الجهة، أو التحية؛\n' +
+        'closing = عبارة ختام ودعاء قبل التوقيع؛ item = بند مرقّم أو منقّط (مثل ١) أو - أو أ-)؛\n' +
+        'names_label = سطر يسبق قائمة أسماء أشخاص (ينتهي غالباً بنقطتين)؛ name = اسم شخص ضمن قائمة أسماء؛\n' +
+        'para = فقرة نصية عادية؛ cont = سطر يكمل السطر السابق في نفس الفقرة (انقسم بسبب كسر سطر وهو لا يبدأ فقرة جديدة)؛\n' +
+        'sign_label = عنوان كتلة التوقيع (مثل: مقدمو المذكرة:)؛ sign_name = اسم موقّع؛ sign_line = أي سطر آخر ضمن التوقيع (مثل: عنهم المحامي / فلان).\n' +
+        'قواعد: التوقيع يكون في نهاية المستند فقط. قائمة الأسماء في أول المستند (المقدّمون) ليست توقيعاً بل names_label ثم name. السطر الطويل الذي هو شرح أو حجة فهو para.\n' +
+        'أجب بمصفوفة JSON واحدة فقط (بدون أي شرح أو علامات ```) عناصرها نصوص بالشكل "الرقم:النوع" وبنفس ترتيب الأسطر وبدون أي سطر ناقص، مثال: ["0:bas","1:court","2:subject"].\n\n' +
+        rows.join('\n');
+      var arr = await sample.json(prompt, { modelTier: 'default' });
+      if (!Array.isArray(arr)) throw { code: 'bad_format', message: 'صيغة غير متوقعة' };
+      arr.forEach(function (x) {
+        var m = String(x).match(/^\s*(\d+)\s*:\s*([a-z_]+)\s*$/);
+        if (m && +m[1] >= a && +m[1] < b && AI_TYPES.indexOf(m[2]) > -1) types[+m[1]] = m[2];
+      });
+    }
+    for (var k = 0; k < types.length; k++) if (!types[k]) types[k] = 'para';
+    aiState = { key: lines.join('\n'), types: types }; aiNote = '';
+  } catch (e) {
+    st.className = 'status warn';
+    var c = e && e.code;
+    var msg = c === 'not_granted' ? 'لم تسمح باستخدام الذكاء الاصطناعي — يعمل التصنيف بالقواعد الثابتة.' :
+      c === 'rate_limited' ? 'ازدحام مؤقت، أعد المحاولة بعد قليل — يعمل التصنيف بالقواعد حالياً.' :
+      'تعذّر التحليل الذكي (' + ((e && (e.message || e.code)) || 'خطأ') + ') — يعمل التصنيف بالقواعد الثابتة.';
+    aiBusy = false; $('b_ai').disabled = false; aiNote = msg; paginate(); return;
+  }
+  aiBusy = false; $('b_ai').disabled = false;
+  paginate();
+}
+function schedule() { clearTimeout(timer); timer = setTimeout(function () { save(); paginate(); }, 350); }
+function labels() { $('v_size').textContent = $('o_size').value; $('v_lh').textContent = $('o_lh').value; }
+
+['f_bas','f_court','f_body','f_sign','o_size','o_lh','o_auto'].forEach(function (id) {
+  $(id).addEventListener('input', function () { labels(); schedule(); });
+  $(id).addEventListener('change', function () { labels(); schedule(); });
+});
+$('b_ai').addEventListener('click', runAI);
+$('f_body').addEventListener('paste', function () { if ($('o_ai').checked) setTimeout(function () { save(); paginate(); runAI(); }, 150); });
+$('b_print').addEventListener('click', function () { paginate(); window.print(); });
+$('b_reset').addEventListener('click', function () {
+  put({ bas: SAMPLE.bas, court: SAMPLE.court, body: SAMPLE.body, sign: SAMPLE.sign, size: 18.5, lh: 1.75, auto: true });
+  labels(); save(); paginate();
+});
+window.addEventListener('resize', fitView);
+window.addEventListener('beforeprint', function () { paginate(); });
+
+put(load() || { bas: SAMPLE.bas, court: SAMPLE.court, body: SAMPLE.body, sign: SAMPLE.sign, size: 18.5, lh: 1.75, auto: true });
+labels();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(paginate); else window.addEventListener('load', paginate);
+window.addEventListener('load', function () { setTimeout(paginate, 300); });
+</script>
+</body>
+</html>
