@@ -58,6 +58,15 @@ button.primary{background:var(--accent);color:var(--accent-fg)}
   .paper:last-child{page-break-after:auto;break-after:auto}
 }
 .credit{margin-top:14px;padding-top:10px;border-top:1px solid var(--line);text-align:center;font-size:15px;color:var(--muted)}.credit b{color:var(--accent)}.clinks{margin-top:6px;display:flex;gap:16px;justify-content:center}.clinks a{color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:20px;padding:2px 14px;font-size:15px}.clinks a:hover{background:var(--accent);color:var(--accent-fg)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;padding-top:calc(20px + env(safe-area-inset-top,0px));padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.modal[hidden]{display:none}
+.mbox{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:28px 24px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.spin{width:56px;height:56px;border:5px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin:0 auto 16px;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.mico{font-size:54px;line-height:1;margin-bottom:10px}
+.mtitle{font-size:22px;font-weight:700;margin-bottom:6px}
+.mtext{font-size:16px;line-height:1.7;color:var(--muted)}
+.mbox button{margin-top:16px;min-width:120px}
 </style>
 </head>
 <body>
@@ -91,6 +100,16 @@ button.primary{background:var(--accent);color:var(--accent-fg)}
       <div class="clinks"><a href="https://www.facebook.com/share/1Hf1nrxte5/" target="_blank" rel="noopener noreferrer">فيسبوك</a><a href="https://wa.me/967775919949" target="_blank" rel="noopener noreferrer">واتساب</a></div></div>
   </div>
   <div id="viewport"><div id="pages"></div></div>
+</div>
+
+<div id="modal" class="modal noprint" hidden>
+  <div class="mbox" role="dialog" aria-live="polite">
+    <div id="mspin" class="spin"></div>
+    <div id="mico" class="mico" hidden></div>
+    <div id="mtitle" class="mtitle"></div>
+    <div id="mtext" class="mtext"></div>
+    <button id="mok" class="primary" hidden>حسناً</button>
+  </div>
 </div>
 
 <script>
@@ -390,34 +409,60 @@ function hashLines(a) { var s = a.join('\n'), h = 5381; for (var i = 0; i < s.le
 var API_SAMPLE = {
   json: async function (prompt) {
     var r;
-    try { r = await fetch('/api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt }) }); }
-    catch (e) { throw { code: 'network', message: 'تعذّر الاتصال بالخادم' }; }
+    var ac = new AbortController(), tm = setTimeout(function () { ac.abort(); }, 50000);
+    try { r = await fetch('/api/classify', { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt }) }); }
+    catch (e) { clearTimeout(tm); throw { code: 'network', message: e && e.name === 'AbortError' ? 'انتهت المهلة (50 ثانية) دون رد من الخادم' : 'تعذّر الاتصال بالخادم' }; }
+    clearTimeout(tm);
     if (!r.ok) {
       var det = ''; try { var ej = await r.json(); det = (ej.detail || ej.error || '') + (ej.status ? ' [' + ej.status + ']' : '') + (ej.model ? ' (' + ej.model + ')' : ''); } catch (e) {}
       throw { code: r.status === 429 ? 'rate_limited' : 'error', message: 'HTTP ' + r.status + (det ? ' — ' + det : '') };
     }
     var j = await r.json();
-    window.lastAIProvider = j.provider ? (j.provider + (j.cached ? ' · من الذاكرة' : '')) : '';
+    window.lastAIProvider = j.provider ? j.provider.slice(-1) + (j.cached ? '•' : '') : '';
     return j.result;
   }
 };
 var AI_TYPES = ['bas','court','subject','heading','center','address','closing','item','names_label','name','para','cont','sign_label','sign_name','sign_line'];
+var modalTimer = null;
+function showModal(kind, title, text) {
+  clearTimeout(modalTimer);
+  $('modal').hidden = false;
+  $('mspin').hidden = kind !== 'busy';
+  $('mico').hidden = kind === 'busy';
+  $('mico').textContent = kind === 'ok' ? '✅' : '⚠️';
+  $('mtitle').textContent = title; $('mtext').textContent = text;
+  $('mok').hidden = kind === 'busy';
+}
+function closeModal() { clearTimeout(modalTimer); $('modal').hidden = true; }
+function doneModal() {
+  var n = document.querySelectorAll('#pages .paper').length;
+  if (aiNote) {
+    showModal('warn', 'تم التنسيق بالطريقة العادية', 'تعذّر الاتصال بالذكاء الاصطناعي حالياً، فنسّقنا مذكرتك بالقواعد الثابتة. عدد الصفحات: ' + n + '. راجعها ثم احفظها PDF أو اطبعها.');
+  } else {
+    var ver = $('status').textContent.indexOf('✔ تم التحقق') !== -1;
+    showModal(ver ? 'ok' : 'warn', ver ? 'تم التنسيق بنجاح' : 'تم التنسيق، راجع النتيجة',
+      'وُزّعت مذكرتك على ' + n + ' صفحة' + (ver ? '، وتم التحقق أن كل الكلمات موجودة. يمكنك الآن حفظها PDF أو طباعتها.' : '. راجع سطر الحالة للتفاصيل.'));
+    if (ver) modalTimer = setTimeout(closeModal, 5000);
+  }
+}
 async function runAI() {
   var st = $('status');
   if (aiBusy) return;
   var d = get(), lines = d.body.split('\n').map(clean).filter(Boolean);
   if (!lines.length) return;
+  showModal('busy', 'جارٍ التنسيق…', 'نحلّل بنية مذكرتك ونوزّعها على الصفحات');
   var sample = null;
   sample = API_SAMPLE;
-  if (!sample) { aiNote = 'التحليل الذكي غير متاح هنا — يعمل التصنيف بالقواعد الثابتة.'; paginate(); return; }
+  if (!sample) { aiNote = 'التحليل الذكي غير متاح هنا — يعمل التصنيف بالقواعد الثابتة.'; paginate(); doneModal(); return; }
   var ckey = 'memo_ai_' + hashLines(lines);
-  try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.length === lines.length) { aiState = { key: lines.join('\n'), types: cv }; aiNote = ''; window.lastAIProvider = 'من ذاكرة المتصفح'; paginate(); return; } } catch (e) {}
+  try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.length === lines.length) { aiState = { key: lines.join('\n'), types: cv }; aiNote = ''; window.lastAIProvider = '•'; paginate(); doneModal(); return; } } catch (e) {}
   aiBusy = true; $('b_ai').disabled = true;
   var types = new Array(lines.length), CH = 300;
   try {
     for (var a = 0; a < lines.length; a += CH) {
       var b = Math.min(lines.length, a + CH);
       st.className = 'status'; st.textContent = '🤖 جارٍ تحليل بنية المذكرة… (' + b + ' / ' + lines.length + ')';
+      $('mtext').textContent = 'تحليل الأسطر: ' + b + ' من ' + lines.length;
       var rows = [];
       for (var i = a; i < b; i++) {
         var t = lines[i], view = t.length > 190 ? t.slice(0, 130) + ' … ' + t.slice(-45) : t;
@@ -453,10 +498,11 @@ async function runAI() {
     var msg = c === 'not_granted' ? 'لم تسمح باستخدام الذكاء الاصطناعي — يعمل التصنيف بالقواعد الثابتة.' :
       c === 'rate_limited' ? 'ازدحام مؤقت، أعد المحاولة بعد قليل — يعمل التصنيف بالقواعد حالياً.' :
       'تعذّر التحليل الذكي (' + ((e && (e.message || e.code)) || 'خطأ') + ') — يعمل التصنيف بالقواعد الثابتة.';
-    aiBusy = false; $('b_ai').disabled = false; aiNote = msg; paginate(); return;
+    aiBusy = false; $('b_ai').disabled = false; aiNote = msg; paginate(); doneModal(); return;
   }
   aiBusy = false; $('b_ai').disabled = false;
   paginate();
+  doneModal();
 }
 function schedule() { clearTimeout(timer); timer = setTimeout(function () { save(); paginate(); }, 350); }
 function labels() { $('v_size').textContent = $('o_size').value; $('v_lh').textContent = $('o_lh').value; }
@@ -466,6 +512,9 @@ function labels() { $('v_size').textContent = $('o_size').value; $('v_lh').textC
   $(id).addEventListener('change', function () { labels(); schedule(); });
 });
 $('b_ai').addEventListener('click', runAI);
+$('mok').addEventListener('click', closeModal);
+$('modal').addEventListener('click', function (e) { if (e.target === this && $('mok').hidden === false) closeModal(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('mok').hidden === false) closeModal(); });
 $('f_body').addEventListener('paste', function () { if ($('o_ai').checked) setTimeout(function () { save(); paginate(); runAI(); }, 150); });
 $('b_print').addEventListener('click', function () { paginate(); window.print(); });
 $('b_reset').addEventListener('click', function () {
