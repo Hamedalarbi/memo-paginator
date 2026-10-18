@@ -679,7 +679,8 @@ async function downloadPDF() {
     ['--fs', '--lh', '--mf'].forEach(function (v) { stage.style.setProperty(v, pagesEl.style.getPropertyValue(v)); });
     document.body.appendChild(stage);
     var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-    var scale = (window.matchMedia && window.matchMedia('(max-width:900px)').matches) ? 2 : 2.5;
+    // دقة التصدير: 2.5 على الهواتف و3 على الشاشات الأكبر
+    var scale = (window.matchMedia && window.matchMedia('(max-width:900px)').matches) ? 2.5 : 3;
     for (var i = 0; i < n; i++) {
       $('mtext').textContent = 'الصفحة ' + (i + 1) + ' من ' + n;
       var c = pages[i].cloneNode(true); c.style.margin = '0'; c.style.boxShadow = 'none'; stage.appendChild(c);
@@ -689,7 +690,17 @@ async function downloadPDF() {
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, 210, 296, undefined, 'FAST');
       stage.removeChild(c); canvas.width = canvas.height = 0;
     }
-    var name = 'مذكرة-' + new Date().toISOString().slice(0, 10) + '.pdf';
+    // إضافة الوقت إلى اسم الملف لتقليل تعارض أسماء التنزيلات
+    var now = new Date();
+    var pad = function (value) { return String(value).padStart(2, '0'); };
+    var name = 'مذكرة-' +
+      now.getFullYear() + '-' +
+      pad(now.getMonth() + 1) + '-' +
+      pad(now.getDate()) + '_' +
+      pad(now.getHours()) + '-' +
+      pad(now.getMinutes()) + '-' +
+      pad(now.getSeconds()) +
+      '.pdf';
     pdf.setProperties({ title: 'مذكرة' });
     pdf.save(name);
     showModal('ok', 'تم تنزيل الملف', 'حُفظ ' + name + ' على جهازك (' + n + (n === 1 ? ' صفحة' : ' صفحات') + ').');
