@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14213d">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="منسّق المذكرات">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>منسّق المذكرات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +37,7 @@
   --accent:#c9a45c;--accent-fg:#14100a;--gold:#c9a45c;--field:#111823;--ok:#55c08a;--warn:#e08a5e;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 18px 40px -18px rgba(0,0,0,.7);}}
 *{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
 html{scroll-padding-top:70px;-webkit-text-size-adjust:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;
   padding-top:env(safe-area-inset-top,0px)}
@@ -110,6 +118,10 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .foot .lk{display:flex;gap:18px;justify-content:center;margin:8px 0}
 .foot .lk a{color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:99px;padding:6px 20px;font-size:14px;font-weight:500;transition:background .15s,color .15s,border-color .15s}
 .foot .lk a:hover{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.foot .lk2{margin:4px 0 10px}
+.foot .ioshint{font-size:12.5px}
+.foot .pl{margin-top:8px;font-size:12.5px}
+.foot .pl a{color:var(--muted);text-underline-offset:3px}
 .foot .pv{font-size:12px;line-height:1.7;opacity:.9}
 
 .deskwrap{min-width:0}
@@ -152,6 +164,9 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .mbox .btn{margin-top:18px;height:46px;min-width:130px}
 .mextra{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .mextra .btn{width:100%;margin:0}
+.mextra .btn.opt{flex-direction:column;gap:3px;height:auto;min-height:66px;padding:12px 14px}
+.mextra .btn.opt strong{font-size:16px;font-weight:600}
+.mextra .btn.opt small{font-size:12px;font-weight:400;opacity:.78;line-height:1.5}
 .mextra .btn.soft{height:40px;border-color:transparent;background:transparent;color:var(--muted);font-weight:500;font-size:14px;text-decoration:underline;text-underline-offset:3px}
 .inapp{display:none;align-items:center;gap:12px;justify-content:space-between;padding:10px 16px;background:var(--ink);color:var(--bg);font-size:13.5px;line-height:1.6}
 .inapp.on{display:flex}
@@ -213,7 +228,6 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
     <div class="acts main">
       <button class="btn primary" data-act="ai" type="button"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 10.5h10M4 15h16M4 19.5h10"/></svg><span>تنسيق تلقائي</span></button>
       <button class="btn" data-act="pdf" type="button"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span>تنزيل PDF</span></button>
-      <button class="btn wide" data-act="print" type="button"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V3.5h10V9M7 17H5.5A1.5 1.5 0 0 1 4 15.5v-5A1.5 1.5 0 0 1 5.5 9h13a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H17M7 14h10v6.5H7z"/></svg><span>طباعة</span></button>
     </div>
     <div class="status" id="status" role="status"></div>
 
@@ -232,9 +246,10 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
     <details class="rep"><summary id="repsum">تفاصيل التحليل</summary><div id="repbody"></div></details>
 
     <div class="foot">
-      <div class="by">تصميم وتطوير <b>م.حامد العربي</b></div>
+      <div class="by">طور بواسطة <b>م/ حامد العربي</b></div>
       <div class="lk"><a href="https://wa.me/967775919949" target="_blank" rel="noopener noreferrer">واتساب</a><a href="https://www.facebook.com/share/1Hf1nrxte5/" target="_blank" rel="noopener noreferrer">فيسبوك</a></div>
       
+      <div class="lk2"><button class="lnkb" id="b_install" type="button" hidden>تثبيت التطبيق على جهازك</button><span id="ioshint" class="ioshint" hidden>للتثبيت على آيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».</span></div>
       <div class="pv">لا يُحفظ أي شيء على خوادمنا. قد تُعالج الأسطر عبر خدمة خارجية لغرض التنسيق فقط.</div>
     </div>
   </section>
@@ -596,19 +611,24 @@ async function runAI() {
   var ckey = 'memo_ai_' + hashLines(lines);
   try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.length === lines.length) { aiState = { key: lines.join('\n'), types: cv }; aiNote = ''; window.lastAIProvider = '•'; paginate(); doneModal(); return; } } catch (e) {}
   aiBusy = true; setBusy(true);
-  var types = new Array(lines.length), CH = 300;
+  var types = new Array(lines.length), chunks = [], cs = 0, cl = 0;
+  for (var q = 0; q < lines.length; q++) {
+    cl += lines[q].length + 12;
+    if (q > cs && (cl > 30000 || q - cs >= 300)) { chunks.push([cs, q]); cs = q; cl = lines[q].length + 12; }
+  }
+  chunks.push([cs, lines.length]);
   try {
-    for (var a = 0; a < lines.length; a += CH) {
-      var b = Math.min(lines.length, a + CH);
+    for (var ci = 0; ci < chunks.length; ci++) {
+      var a = chunks[ci][0], b = chunks[ci][1];
       st.className = 'status'; st.textContent = 'جارٍ تحليل بنية المذكرة (' + b + ' / ' + lines.length + ')';
       $('mtext').textContent = 'تحليل الأسطر: ' + b + ' من ' + lines.length;
       var rows = [];
       for (var i = a; i < b; i++) {
-        var t = lines[i], view = t.length > 190 ? t.slice(0, 130) + ' … ' + t.slice(-45) : t;
+        var t = lines[i], view = t;
         rows.push(i + ' [' + t.length + '] ' + view);
       }
       var prompt = 'أنت مصنِّف لبنية المستندات القانونية والرسمية (مذكرات، لوائح، شكاوى، عقود…) بأي أسلوب كتابة وبأي لغة.\n' +
-        'أمامك أسطر مستند مرقّمة (' + a + ' إلى ' + (b - 1) + ' من أصل ' + lines.length + ' سطراً). الرقم ثم [طول السطر] ثم السطر (الطويل مقتطع من وسطه).\n' +
+        'أمامك أسطر مستند مرقّمة (' + a + ' إلى ' + (b - 1) + ' من أصل ' + lines.length + ' سطراً). الرقم ثم [طول السطر] ثم السطر (كاملاً).\n' +
         'مهمتك الوحيدة: تحديد نوع كل سطر بحسب وظيفته في المستند، دون إعادة كتابة أي نص.\n' +
         'الأنواع المسموحة فقط:\n' +
         'bas = البسملة؛ court = سطر الجهة/المحكمة المخاطَبة في الترويسة؛ subject = سطر الموضوع؛\n' +
@@ -653,10 +673,16 @@ function showModal(kind, title, text) {
   clearTimeout(modalTimer);
   $('modal').hidden = false;
   $('mspin').hidden = kind !== 'busy';
-  var mi = $('mico'); mi.hidden = kind === 'busy'; mi.className = 'mico ' + kind; mi.innerHTML = kind === 'busy' ? '' : ICO[kind];
+  var mi = $('mico'), nov = (kind === 'busy' || kind === 'choice'); mi.hidden = nov; mi.className = 'mico ' + kind; mi.innerHTML = nov ? '' : ICO[kind];
   $('mtitle').textContent = title; $('mtext').textContent = text;
-  $('mok').hidden = kind === 'busy';
+  $('mok').hidden = (kind === 'busy' || kind === 'choice');
   $('mextra').innerHTML = '';
+}
+function addOption(label, desc, fn, cls) {
+  var b = document.createElement('button'); b.type = 'button'; b.className = 'btn opt ' + (cls || '');
+  var t = document.createElement('strong'); t.textContent = label;
+  var d = document.createElement('small'); d.textContent = desc;
+  b.appendChild(t); b.appendChild(d); b.addEventListener('click', fn); $('mextra').appendChild(b); return b;
 }
 function addExtra(label, fn, cls) {
   var b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (cls || ''); b.textContent = label;
@@ -714,6 +740,26 @@ async function renderPage(html2canvas, node, scale) {
   try { return await html2canvas(node, { scale: scale, backgroundColor: '#ffffff', logging: false, useCORS: true }); }
   catch (e) { return await html2canvas(node, { scale: Math.max(1.6, scale * 0.65), backgroundColor: '#ffffff', logging: false, useCORS: true }); }
 }
+function openDownloadChoice() {
+  if (!$$('#pages .paper').length) paginate();
+  showModal('choice', 'اختر طريقة التنزيل', 'حدّد الأنسب لك:');
+  addOption('تنزيل تلقائي', 'حجم الملف أكبر ودقته أقل', function () { downloadPDF(); }, 'primary');
+  addOption('طريقة أخرى', 'حجم الملف أقل ودقته أعلى', function () { otherMethod(); }, '');
+  addExtra('إلغاء', closeModal, 'soft');
+}
+function otherMethod() {
+  showModal('ok', 'خطوة أخيرة', 'ستظهر لك نافذة حفظ. اختر الوجهة «حفظ كملف PDF» (Save as PDF) ثم اضغط حفظ.');
+  addExtra('متابعة', function () { closeModal(); runOther(); }, 'primary');
+  addExtra('إلغاء', closeModal, 'soft');
+}
+function runOther() {
+  paginate();
+  var old = document.title;
+  document.title = fileName().replace(/\.pdf$/, '');
+  var restore = function () { document.title = old; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  setTimeout(function () { window.print(); }, 80);
+}
 async function downloadPDF() {
   var pagesEl = $('pages'), stage = null;
   showModal('busy', 'جارٍ إنشاء ملف PDF', 'تجهيز الصفحات');
@@ -763,6 +809,15 @@ async function downloadPDF() {
   } finally { if (stage && stage.parentNode) stage.parentNode.removeChild(stage); }
 }
 if (IN_APP) { $('inapp').classList.add('on'); }
+/* تثبيت التطبيق (PWA) */
+var deferredInstall = null, STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredInstall = e; if (!STANDALONE) $('b_install').hidden = false; });
+$('b_install').addEventListener('click', function () { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(function () { deferredInstall = null; $('b_install').hidden = true; }); });
+window.addEventListener('appinstalled', function () { $('b_install').hidden = true; });
+if (IS_IOS && !STANDALONE && !IN_APP) $('ioshint').hidden = false;
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+}
 $('b_copylink').addEventListener('click', function () {
   var done = function () { toast('تم نسخ الرابط، الصقه في المتصفح'); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href).then(done, function () { window.prompt('انسخ الرابط:', location.href); });
@@ -781,7 +836,7 @@ function useFont(n) {
 });
 $('o_font').addEventListener('change', function () { useFont($('o_font').value).then(function () { save(); paginate(); }); });
 $$('[data-act=ai]').forEach(function (b) { b.addEventListener('click', runAI); });
-$$('[data-act=pdf]').forEach(function (b) { b.addEventListener('click', downloadPDF); });
+$$('[data-act=pdf]').forEach(function (b) { b.addEventListener('click', openDownloadChoice); });
 $$('[data-act=print]').forEach(function (b) { b.addEventListener('click', function () { paginate(); window.print(); }); });
 $$('.tab').forEach(function (t) { t.addEventListener('click', function () { setView(t.getAttribute('data-v')); }); });
 $('mok').addEventListener('click', closeModal);

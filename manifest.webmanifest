@@ -1,0 +1,20 @@
+{
+  "name": "منسّق المذكرات",
+  "short_name": "منسّق المذكرات",
+  "description": "الصق نص مذكرتك ليوزَّع تلقائياً على صفحات A4 بإطار وترقيم، ثم نزّله PDF.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f2ed",
+  "theme_color": "#14213d",
+  "categories": ["productivity", "business", "utilities"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
