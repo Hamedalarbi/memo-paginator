@@ -164,6 +164,15 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .mbox .btn{margin-top:18px;height:46px;min-width:130px}
 .mextra{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .mextra .btn{width:100%;margin:0}
+.installbar{position:fixed;inset-inline:12px;bottom:calc(22px + env(safe-area-inset-bottom,0px));margin:0 auto;max-width:460px;z-index:45;display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px -12px rgba(8,12,20,.45);animation:pop .25s ease}
+.installbar .ib-ic{width:42px;height:42px;border-radius:12px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;flex:none}
+.installbar .ib-tx{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.5}
+.installbar .ib-tx strong{font-size:15px;font-weight:600}
+.installbar .ib-tx span{font-size:12.5px;color:var(--muted)}
+.installbar .ib-b{height:40px;min-width:78px;padding:0 14px;font-size:14.5px;flex:none}
+.installbar .ib-x{flex:none;width:30px;height:30px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:8px;display:grid;place-items:center}
+.installbar .ib-x:hover{color:var(--ink)}
+@media (max-width:900px){.installbar{bottom:calc(88px + env(safe-area-inset-bottom,0px))}}
 .mextra .btn.opt{flex-direction:column;gap:3px;height:auto;min-height:66px;padding:12px 14px}
 .mextra .btn.opt strong{font-size:16px;font-weight:600}
 .mextra .btn.opt small{font-size:12px;font-weight:400;opacity:.78;line-height:1.5}
@@ -265,6 +274,12 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
   <button class="btn" data-act="pdf" type="button"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span>تنزيل PDF</span></button>
 </div>
 
+<div id="installbar" class="installbar noprint" hidden role="dialog" aria-label="تثبيت التطبيق">
+  <div class="ib-ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></div>
+  <div class="ib-tx"><strong>ثبّت التطبيق على جهازك</strong><span id="ib_sub"></span></div>
+  <button id="ib_go" class="btn primary ib-b" type="button">تثبيت</button>
+  <button id="ib_x" class="ib-x" type="button" aria-label="إغلاق"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+</div>
 <div id="toast" class="toast noprint" hidden><span id="tmsg"></span><button id="tundo" type="button" hidden>تراجع</button></div>
 
 <div id="modal" class="modal noprint" hidden>
@@ -811,9 +826,24 @@ async function downloadPDF() {
 if (IN_APP) { $('inapp').classList.add('on'); }
 /* تثبيت التطبيق (PWA) */
 var deferredInstall = null, STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredInstall = e; if (!STANDALONE) $('b_install').hidden = false; });
+var installTimerDone = false;
+window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferredInstall = e; if (!STANDALONE) $('b_install').hidden = false; maybeShowInstall(); });
 $('b_install').addEventListener('click', function () { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(function () { deferredInstall = null; $('b_install').hidden = true; }); });
-window.addEventListener('appinstalled', function () { $('b_install').hidden = true; });
+window.addEventListener('appinstalled', function () { $('b_install').hidden = true; $('installbar').hidden = true; });
+function installDismissed() { try { return Date.now() - (+localStorage.getItem('memo_install_x') || 0) < 7 * 864e5; } catch (e) { return false; } }
+function dismissInstall() { try { localStorage.setItem('memo_install_x', String(Date.now())); } catch (e) {} $('installbar').hidden = true; }
+function maybeShowInstall() {
+  if (!installTimerDone || STANDALONE || IN_APP || installDismissed() || !$('installbar').hidden) return;
+  if (!$('modal').hidden) { setTimeout(maybeShowInstall, 3000); return; }
+  if (deferredInstall) { $('ib_sub').textContent = 'وصول أسرع، ويعمل حتى دون إنترنت'; $('ib_go').textContent = 'تثبيت'; $('installbar').hidden = false; }
+  else if (IS_IOS) { $('ib_sub').textContent = 'اضغط زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»'; $('ib_go').textContent = 'فهمت'; $('installbar').hidden = false; }
+}
+$('ib_x').addEventListener('click', dismissInstall);
+$('ib_go').addEventListener('click', function () {
+  if (deferredInstall) { var d = deferredInstall; d.prompt(); d.userChoice.finally(function () { deferredInstall = null; $('installbar').hidden = true; $('b_install').hidden = true; }); }
+  else dismissInstall();
+});
+window.addEventListener('load', function () { setTimeout(function () { installTimerDone = true; maybeShowInstall(); }, 4000); });
 if (IS_IOS && !STANDALONE && !IN_APP) $('ioshint').hidden = false;
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
