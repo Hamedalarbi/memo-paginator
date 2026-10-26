@@ -173,6 +173,14 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .installbar .ib-x{flex:none;width:30px;height:30px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:8px;display:grid;place-items:center}
 .installbar .ib-x:hover{color:var(--ink)}
 @media (max-width:900px){.installbar{bottom:calc(88px + env(safe-area-inset-bottom,0px))}}
+.ttl2{text-decoration:none;font-size:var(--fs);margin:10px 0 6px;color:#2c3e50}
+.li2{margin-right:46px}
+.quote{margin-right:28px;margin-left:28px;font-size:calc(var(--fs)*.98)}
+.srow{font-size:calc(var(--fs)*1.05);line-height:var(--lh);text-align:center;width:44%;min-width:210px;max-width:100%;margin-left:0;margin-right:auto}
+.srow.s0{margin-top:14px}
+.srow b{color:#2980b9}
+.srow.center{text-align:center;color:#4a4a4a;margin-bottom:6px;width:auto;margin-right:0}
+.srow.sl{font-weight:700}
 .mextra .btn.opt{flex-direction:column;gap:3px;height:auto;min-height:66px;padding:12px 14px}
 .mextra .btn.opt strong{font-size:16px;font-weight:600}
 .mextra .btn.opt small{font-size:12px;font-weight:400;opacity:.78;line-height:1.5}
@@ -249,7 +257,7 @@ details.rep{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
           </select></div>
         <div class="fld"><label for="o_size"><span>حجم الخط</span><b id="v_size"></b></label><input type="range" id="o_size" min="15" max="22" step="0.5"></div>
         <div class="fld"><label for="o_lh"><span>تباعد الأسطر</span><b id="v_lh"></b></label><input type="range" id="o_lh" min="1.4" max="2" step="0.05"></div>
-        <label class="sw"><span>ضبط حجم الخط تلقائياً ليسبق التوقيع نص من المذكرة</span><input type="checkbox" id="o_auto"></label>
+        <label class="sw"><span>ضبط التباعد تلقائياً لتوازن الصفحات والتوقيع</span><input type="checkbox" id="o_auto"></label>
       </div>
     </details>
     <details class="rep"><summary id="repsum">تفاصيل التحليل</summary><div id="repbody"></div></details>
@@ -374,31 +382,128 @@ function liEl(l, name) {
   }
   return e;
 }
-var lastReport = [], lastExpected = 0, reserveExtra = 3;
+var lastReport = [], reserveExtra = 3;
+var AI_VALID = { bas: 1, court: 1, subject: 1, h1: 1, h2: 1, heading: 1, para: 1, item: 1, subitem: 1, quote: 1, address: 1, center: 1, closing: 1, names_label: 1, name: 1, sign_label: 1, sign_name: 1, sign_line: 1, cont: 1 };
+/* فحص مخرجات النموذج: أي نوع لا يناسب شكل السطر يُعاد إلى فقرة عادية، فلا تنشأ كتل ضخمة غير قابلة للتقسيم */
+function sigOf(l) {
+  if (R.ord.test(norm(l))) return 'ord';
+  if (/^[\(\[]?[0-9\u0660-\u0669]{1,3}\s*[\)\]]/.test(l)) return 'num)';
+  if (/^[0-9\u0660-\u0669]{1,3}\s*[\-\u2013\u2014\.]/.test(l)) return 'num-';
+  if (/^[\(\[]?[\u0627-\u064a]\s*[\)\]\-\u2013]/.test(l)) return 'let';
+  return 'none';
+}
+/* مراجعة بعد النموذج: توحيد مستوى العناوين ذات النمط الواحد، واستدراك العناوين القصيرة التي عدّها النموذج فقرات */
+function harmonizeHeadings(lines, T) {
+  var n = lines.length, i, g = {}, sg;
+  for (i = 0; i < n; i++) { sg = sigOf(lines[i]); if (sg !== 'none') (g[sg] = g[sg] || []).push(i); }
+  for (sg in g) {
+    var h1 = [], h2 = [], ps = [];
+    g[sg].forEach(function (k) { if (T[k] === 'h1') h1.push(k); else if (T[k] === 'h2') h2.push(k); else if (T[k] === 'para') ps.push(k); });
+    if (h1.length + h2.length >= 2) {
+      var lvl = h1.length >= h2.length ? 'h1' : 'h2';
+      h1.concat(h2).forEach(function (k) { T[k] = lvl; });
+      ps.forEach(function (k) {
+        var L = lines[k], nx = lines[k + 1] || '';
+        if (L.length <= 100 && !/[،؛,]/.test(L) && !/[.؟!]\s*$/.test(L) && nx.length >= 40 && (T[k + 1] === 'para' || T[k + 1] === 'quote')) T[k] = lvl;
+      });
+    }
+  }
+  var seen = false;
+  for (i = 0; i < n; i++) {
+    if (T[i] === 'h1') seen = true;
+    if (T[i] !== 'para') continue;
+    var L2 = lines[i], body = L2.replace(/[:：]\s*$/, ''), nx2 = lines[i + 1] || '';
+    if (L2.length > 90 || /[،؛,.؟!]/.test(body) || nx2.length < 60 || !(T[i + 1] === 'para' || T[i + 1] === 'quote')) continue;
+    if (R.ord.test(norm(L2))) { T[i] = 'h1'; seen = true; }
+    else if (/[:：]\s*$/.test(L2) && L2.split(/\s+/).length <= 12) { T[i] = seen ? 'h2' : 'h1'; seen = true; }
+  }
+}
+function sanitizeTypes(lines, types) {
+  var n = lines.length, T = [], i, t, len;
+  for (i = 0; i < n; i++) { t = types[i]; if (!AI_VALID[t]) t = 'para'; if (t === 'heading') t = 'h1'; T.push(t); }
+  var SHORT = { center: 1, address: 1, closing: 1, names_label: 1, name: 1, sign_label: 1, sign_name: 1, sign_line: 1, court: 1, bas: 1 };
+  for (i = 0; i < n; i++) {
+    t = T[i]; len = lines[i].length;
+    if ((t === 'h1' || t === 'h2') && (len > 120 || (len > 90 && /[.؟!]\s*$/.test(lines[i])))) T[i] = 'para';
+    else if (t === 'subject' && len > 240) T[i] = 'para';
+    else if (SHORT[t] && len > 200) T[i] = 'para';
+  }
+  var seenB = false, seenC = false;
+  for (i = 0; i < n; i++) {
+    if (T[i] === 'bas') { if (seenB || i > 8) T[i] = 'para'; else seenB = true; }
+    if (T[i] === 'court') { if (seenC || i > 10) T[i] = 'para'; else seenC = true; }
+  }
+  var j = n - 1; while (j >= 0 && /^sign_/.test(T[j])) j--;
+  var firstSign = j + 1;
+  for (i = 0; i < firstSign; i++) if (/^sign_/.test(T[i])) T[i] = (T[i] === 'sign_name') ? 'name' : 'para';
+  if (n - firstSign > 40) for (i = firstSign; i < n; i++) T[i] = 'para';
+  /* ثلاثة أسطر متتالية أو أكثر من نوع «عنوان» هي في الغالب فقرة واحدة مكسورة الأسطر، لا عناوين: نعيدها فقرة ونصل أسطرها */
+  for (i = 0; i < n;) {
+    if (T[i] === 'h1' || T[i] === 'h2') {
+      var e = i; while (e + 1 < n && (T[e + 1] === 'h1' || T[e + 1] === 'h2')) e++;
+      if (e - i + 1 >= 3) { T[i] = 'para'; for (var k2 = i + 1; k2 <= e; k2++) T[k2] = /[.؟?!:؛]\s*$/.test(lines[k2 - 1]) ? 'para' : 'cont'; }
+      i = e + 1;
+    } else i++;
+  }
+  harmonizeHeadings(lines, T);
+  var seenH1 = false, seenItem = false;
+  for (i = 0; i < n; i++) {
+    if (T[i] === 'h1') { seenH1 = true; seenItem = false; }
+    else if (T[i] === 'h2' && !seenH1) { T[i] = 'h1'; seenH1 = true; }
+    if (T[i] === 'item') seenItem = true;
+    else if (T[i] === 'subitem' && !seenItem) { T[i] = 'item'; seenItem = true; }
+  }
+  return T;
+}
+function signRows(sl, slt, manual) {
+  var rows = [];
+  sl.forEach(function (x, ix) {
+    var line = document.createElement('div'), t = x, nx = norm(t), sty = slt ? slt[ix] : null;
+    line.className = 'srow';
+    if (sty === 'closing') { line.className += ' center'; line.textContent = t; }
+    else if (sty === 'sign_label') { line.className += ' sl'; line.textContent = t; }
+    else if (sty === 'sign_name') { var bn = document.createElement('b'); bn.textContent = t; line.appendChild(bn); }
+    else if (R.close.test(nx)) { line.className += ' center'; line.textContent = t; }
+    else if (manual && t.indexOf('*') !== -1) {
+      var p = t.indexOf('*'); if (p > 0) line.appendChild(document.createTextNode(t.slice(0, p)));
+      var b = document.createElement('b'); b.textContent = t.slice(p + 1).trim(); line.appendChild(b);
+    } else if (R.sig.test(nx) && /[\/]/.test(t) && t.split('/')[1].trim()) {
+      var q = t.indexOf('/'); line.appendChild(document.createTextNode(t.slice(0, q + 1) + ' '));
+      var b2 = document.createElement('b'); b2.textContent = t.slice(q + 1).trim(); line.appendChild(b2);
+    } else if (/[:：]$/.test(t) || R.sig.test(nx)) { line.className += ' sl'; line.textContent = t; }
+    else if (isName(t)) { var b3 = document.createElement('b'); b3.textContent = t; line.appendChild(b3); }
+    else line.textContent = t;
+    rows.push(line);
+  });
+  /* ربط الأسطر: التوقيع القصير يبقى كتلة واحدة؛ والطويل يجوز أن ينقسم بين أسماء بشرط بقاء بدايته ونهايته متماسكتين */
+  var n = rows.length;
+  rows.forEach(function (r, i) {
+    r.setAttribute('data-sign', 1);
+    if (i === 0) { r.setAttribute('data-sign0', 1); r.setAttribute('data-tail', 1); r.className += ' s0'; }
+    r.setAttribute('data-keep', 1);
+  });
+  return rows;
+}
 function parseBlocks(d) {
   var out = [], rep = [], bas = d.bas.trim(), court = d.court.trim();
-  var lines = d.body.split('\n').map(clean).filter(Boolean), extra = 0, tys = null, slt = null;
-  var fb = true, fc = true;
-  var ai = (aiState && aiState.key === lines.join('\n')) ? aiState.types : null;
+  var lines = d.body.split('\n').map(clean).filter(Boolean), tys = null, slt = null;
+  var ai = (aiState && aiState.key === lines.join('\n')) ? sanitizeTypes(lines, aiState.types) : null;
   if (ai) {
     var L2 = [], T2 = [];
     for (var q = 0; q < lines.length; q++) {
-      var tq = ai[q] || 'para';
-      if (tq === 'cont' && L2.length && T2[T2.length - 1] !== 'bas' && T2[T2.length - 1] !== 'court') L2[L2.length - 1] += ' ' + lines[q];
+      var tq = ai[q] || 'para', pt = T2.length ? T2[T2.length - 1] : '';
+      if (tq === 'cont' && L2.length && /^(para|item|subitem|quote)$/.test(pt)) L2[L2.length - 1] += ' ' + lines[q];
       else { L2.push(lines[q]); T2.push(tq === 'cont' ? 'para' : tq); }
     }
     lines = L2; tys = T2;
-    var bi = tys.indexOf('bas'); if (bi > -1) { bas = lines[bi]; lines.splice(bi, 1); tys.splice(bi, 1); fb = false; }
-    var ci0 = tys.indexOf('court'); if (ci0 > -1) { court = lines[ci0]; lines.splice(ci0, 1); tys.splice(ci0, 1); fc = false; }
+    var bi = tys.indexOf('bas'); if (bi > -1) { bas = lines[bi]; lines.splice(bi, 1); tys.splice(bi, 1); }
+    var ci0 = tys.indexOf('court'); if (ci0 > -1) { court = lines[ci0]; lines.splice(ci0, 1); tys.splice(ci0, 1); }
   } else {
-    if (lines.length && R.bas.test(norm(lines[0]))) { bas = lines.shift(); fb = false; }
-    if (lines.length && R.court.test(norm(lines[0])) && lines[0].length < 120) { court = lines.shift(); fc = false; }
+    if (lines.length && R.bas.test(norm(lines[0]))) { bas = lines.shift(); }
+    if (lines.length && R.court.test(norm(lines[0])) && lines[0].length < 120) { court = lines.shift(); }
   }
-  if (fb) extra += wordsOf(bas); if (fc) extra += wordsOf(court);
-  if (d.sign.trim()) extra += wordsOf(d.sign.replace(/\*/g, ''));
-  lastExpected = wordsOf(d.body.replace(/^\s*(#|>)\s/gm, '')) + extra;
-  var sl;
-  if (d.sign.trim()) sl = d.sign.split('\n').map(clean).filter(Boolean);
+  var sl, manual = false;
+  if (d.sign.trim()) { sl = d.sign.split('\n').map(clean).filter(Boolean); manual = true; }
   else if (tys) {
     sl = []; slt = [];
     for (var z = 0; z < lines.length;) {
@@ -423,13 +528,13 @@ function parseBlocks(d) {
     if (court) h.appendChild(mk('court', court));
     out.push(h); rep.push(['ترويسة', bas + ' ' + court]);
   }
+  var hseen = false;
   for (var i = 0; i < lines.length; i++) {
-    var l = lines[i], n = norm(l), mm;
-    if (l.indexOf('# ') === 0) { out.push(mk('ttl', l.slice(2), { 'data-keep': 1 })); rep.push(['عنوان', l.slice(2)]); continue; }
-    if (l.indexOf('> ') === 0) { out.push(mk('ct center', l.slice(2), { 'data-nosplit': 1 })); rep.push(['وسط', l.slice(2)]); continue; }
+    var l = lines[i], n = norm(l);
     if (tys) {
-      var ty = tys[i];
-      if (ty === 'heading') { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); continue; }
+      var ty = tys[i], pty = i > 0 ? tys[i - 1] : '';
+      if (ty === 'h1') { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان رئيسي', l]); continue; }
+      if (ty === 'h2') { out.push(mk('ttl ttl2', l, { 'data-keep': 1 })); rep.push(['عنوان فرعي', l]); continue; }
       if (ty === 'subject') {
         var c1 = l.search(/[:：]/), e1 = mk('ct', '', { 'data-nosplit': 1 });
         if (c1 > -1 && c1 <= 40) { var b1 = document.createElement('b'); b1.textContent = l.slice(0, c1 + 1); e1.appendChild(b1); e1.appendChild(document.createTextNode(' ' + l.slice(c1 + 1).trim())); }
@@ -438,8 +543,10 @@ function parseBlocks(d) {
       }
       if (ty === 'center' || ty === 'address' || ty === 'closing') { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['وسط', l]); continue; }
       if (ty === 'item') { out.push(liEl(l, false)); rep.push(['بند', l]); continue; }
+      if (ty === 'subitem') { var si = liEl(l, false); si.className += ' li2'; out.push(si); rep.push(['بند فرعي', l]); continue; }
+      if (ty === 'quote') { out.push(mk('ct quote', l)); rep.push(['اقتباس', l]); continue; }
       if (ty === 'names_label') { out.push(l.length <= 160 ? mk('ct bold', l, { 'data-nosplit': 1, 'data-keep': 1 }) : mk('ct', l)); rep.push(['عنوان قائمة', l]); continue; }
-      if (ty === 'name') { out.push(liEl(l, true)); rep.push(['اسم', l]); continue; }
+      if (ty === 'name') { var nm = liEl(l, true); if (pty === 'names_label') nm.setAttribute('data-keep', 1); out.push(nm); rep.push(['اسم', l]); continue; }
       out.push(mk('ct', l)); continue;
     }
     if (R.subj.test(n) && l.length < 240) {
@@ -449,13 +556,13 @@ function parseBlocks(d) {
     }
     if (R.ord.test(n)) {
       var ci = l.search(/[:：]/);
-      if (l.length <= 110) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); continue; }
+      if (l.length <= 110 && !(l.length > 60 && !/[:：]/.test(l))) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); hseen = true; continue; }
       if (ci > -1 && ci <= 40) {
         out.push(mk('ttl', l.slice(0, ci + 1), { 'data-keep': 1 })); rep.push(['عنوان', l.slice(0, ci + 1)]);
         out.push(mk('ct', l.slice(ci + 1).trim())); continue;
       }
     }
-    if (R.sect.test(n)) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); continue; }
+    if (R.sect.test(n)) { out.push(mk('ttl', l, { 'data-keep': 1 })); rep.push(['عنوان', l]); hseen = true; continue; }
     if (R.addr.test(n) && l.length < 160) { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['وسط', l]); continue; }
     if (R.close.test(n) && l.length < 140) { out.push(mk('ct center', l, { 'data-nosplit': 1 })); rep.push(['ختام', l]); continue; }
     if (/[:：]$/.test(l)) {
@@ -463,46 +570,33 @@ function parseBlocks(d) {
       if (j2 - i - 1 >= 2) {
         out.push(l.length <= 100 ? mk('ct bold', l, { 'data-nosplit': 1, 'data-keep': 1 }) : mk('ct', l));
         rep.push(['قائمة أسماء', l]);
-        for (var k = i + 1; k < j2; k++) out.push(liEl(lines[k], true));
+        for (var k = i + 1; k < j2; k++) { var nm2 = liEl(lines[k], true); if (k === i + 1) nm2.setAttribute('data-keep', 1); out.push(nm2); }
         i = j2 - 1; continue;
       }
     }
-    if (R.pre.test(l) && (l.indexOf('- ') === 0 ? true : true)) {
-      var txt = (l.indexOf('- ') === 0 && /^-\s+[\u0660-\u0669\d]/.test(l)) ? l.slice(2) : l;
-      out.push(liEl(txt, false)); rep.push(['بند', txt]); continue;
+    if (/[:：]$/.test(l) && l.length <= 90 && !/[،؛,]/.test(l.slice(0, -1)) && lines[i + 1] && lines[i + 1].length >= 60 && !R.pre.test(lines[i + 1])) {
+      out.push(mk(hseen ? 'ttl ttl2' : 'ttl', l, { 'data-keep': 1 })); rep.push([hseen ? 'عنوان فرعي' : 'عنوان رئيسي', l]); hseen = true; continue;
+    }
+    if (R.pre.test(l)) {
+      var nxl = lines[i + 1] || '', dash = /^[•●▪·◦■\-–—]/.test(l);
+      if (!dash && l.length <= 100 && !/[،؛,]/.test(l) && !/[.؟!]\s*$/.test(l) && nxl.length >= 140 && !R.pre.test(nxl) && !(i > 0 && R.pre.test(lines[i - 1]))) {
+        out.push(mk(hseen ? 'ttl ttl2' : 'ttl', l, { 'data-keep': 1 })); rep.push([hseen ? 'عنوان فرعي' : 'عنوان رئيسي', l]); hseen = true; continue;
+      }
+      out.push(liEl(l, false)); rep.push(['بند', l]); continue;
     }
     out.push(mk('ct', l));
   }
-  if (sl.length) {
-    var s = mk('sign', '', { 'data-nosplit': 1, 'data-tail': 1 });
-    sl.forEach(function (x, ix) {
-      var line = document.createElement('div'), t = x, nx = norm(t), sty = slt ? slt[ix] : null;
-      if (sty === 'closing') { line.className = 'center'; line.textContent = t; }
-      else if (sty === 'sign_label') { line.className = 'sl'; line.textContent = t; }
-      else if (sty === 'sign_name') { var bn = document.createElement('b'); bn.textContent = t; line.appendChild(bn); }
-      else if (R.close.test(nx)) { line.className = 'center'; line.textContent = t; }
-      else if (t.indexOf('*') !== -1) {
-        var p = t.indexOf('*'); if (p > 0) line.appendChild(document.createTextNode(t.slice(0, p)));
-        var b = document.createElement('b'); b.textContent = t.slice(p + 1).trim(); line.appendChild(b);
-      } else if (R.sig.test(nx) && /[\/]/.test(t) && t.split('/')[1].trim()) {
-        var q = t.indexOf('/'); line.appendChild(document.createTextNode(t.slice(0, q + 1) + ' '));
-        var b2 = document.createElement('b'); b2.textContent = t.slice(q + 1).trim(); line.appendChild(b2);
-      } else if (/[:：]$/.test(t) || R.sig.test(nx)) { line.className = 'sl'; line.textContent = t; }
-      else if (isName(t)) { var b3 = document.createElement('b'); b3.textContent = t; line.appendChild(b3); }
-      else line.textContent = t;
-      s.appendChild(line);
-    });
-    out.push(s); rep.push(['توقيع', sl.join(' | ')]);
-  }
+  if (sl.length) { signRows(sl, slt, manual).forEach(function (r) { out.push(r); }); rep.push(['توقيع', sl.join(' | ')]); }
   lastReport = rep;
   return out;
 }
 
-function build(d, scale) {
+function bottomOfEl(el) { return el.offsetTop + el.offsetHeight + (parseFloat(getComputedStyle(el).marginBottom) || 0); }
+function build(d, lvl) {
   var pagesEl = $('pages');
   pagesEl.innerHTML = '';
-  pagesEl.style.setProperty('--fs', (parseFloat(d.size) * scale).toFixed(2) + 'px');
-  pagesEl.style.setProperty('--lh', d.lh);
+  pagesEl.style.setProperty('--fs', (parseFloat(d.size) * lvl.fs).toFixed(2) + 'px');
+  pagesEl.style.setProperty('--lh', lvl.lh);
   pagesEl.style.setProperty('--mf', fontStack(d.font));
   var cur = null;
   function newPage() {
@@ -510,70 +604,150 @@ function build(d, scale) {
     p.innerHTML = '<div class="frame"><div class="pbody"></div><div class="pfoot">صفحة | 0</div></div>';
     pagesEl.appendChild(p); cur = p.querySelector('.pbody');
   }
-  function over() { var l = cur.lastElementChild; if (!l) return false; var mb = parseFloat(getComputedStyle(l).marginBottom) || 0; return (l.offsetTop + l.offsetHeight + mb) > cur.clientHeight - reserveExtra; }
+  function over() { var l = cur.lastElementChild; return l ? bottomOfEl(l) > cur.clientHeight - reserveExtra : false; }
+  function lineH(el) { return (parseFloat(getComputedStyle(el).fontSize) || 18) * lvl.lh; }
+  function linesOf(el) { return Math.max(1, Math.round(el.offsetHeight / lineH(el))); }
+  function isPlain(el) { return !el.hasAttribute('data-nosplit') && (!el.hasAttribute('data-keep') || el.textContent.length > 150) && !el.hasAttribute('data-sign') && el.children.length === 0; }
+
+  /* عند انتقال التوقيع وحده إلى صفحة جديدة: نسحب معه سطرين أو ثلاثة من آخر النص حتى لا يقف وحده */
+  function pullCompanion() {
+    var last = cur.lastElementChild;
+    if (!last || last.hasAttribute('data-keep') || last.hasAttribute('data-sign')) return null;
+    if (isPlain(last)) {
+      var L = linesOf(last);
+      if (L < 4) { cur.removeChild(last); return { whole: last }; }
+      var words = last.textContent.trim().split(/\s+/), n = words.length, m = Math.max(4, Math.round(n * 2.2 / L));
+      var piece = document.createElement('div'); piece.className = last.className; piece.setAttribute('style', 'margin-top:0');
+      for (var t = 0; t < 12; t++) {
+        piece.textContent = words.slice(n - m).join(' '); cur.appendChild(piece);
+        var pl = linesOf(piece); cur.removeChild(piece);
+        if (pl < 2) m += 2; else if (pl > 2 && m > 4) m -= 1; else break;
+      }
+      last.textContent = words.slice(0, n - m).join(' ');
+      if (linesOf(last) < 2) { last.textContent = words.join(' '); return null; }
+      piece.textContent = words.slice(n - m).join(' ');
+      return { piece: piece, src: last, words: words };
+    }
+    cur.removeChild(last); return { whole: last };
+  }
   function toNext(el) {
     cur.removeChild(el);
-    var last = cur.lastElementChild, keep = [];
-    while (last && last.hasAttribute('data-keep') && cur.children.length > 1) { keep.unshift(last); cur.removeChild(last); last = cur.lastElementChild; }
-    newPage(); keep.forEach(function (k) { cur.appendChild(k); }); cur.appendChild(el);
+    var chain = [el], last = cur.lastElementChild;
+    while (last && last.hasAttribute('data-keep') && cur.children.length > 1) { chain.unshift(last); cur.removeChild(last); last = cur.lastElementChild; }
+    var old = cur, comp = null;
+    if (chain[0].hasAttribute('data-sign0')) { comp = pullCompanion(); if (comp) chain.unshift(comp.piece || comp.whole); }
+    newPage();
+    chain.forEach(function (c) { cur.appendChild(c); });
+    if (comp && over()) { /* لا يتسع التوقيع مع النص المسحوب: نُرجعه */
+      var back = comp.piece || comp.whole; cur.removeChild(back);
+      if (comp.piece) comp.src.textContent = comp.words.join(' '); else old.appendChild(comp.whole);
+    }
   }
   function place(el) {
     cur.appendChild(el);
     if (!over()) return;
-    var splittable = !el.hasAttribute('data-nosplit') && !el.hasAttribute('data-keep') && el.children.length === 0;
-    if (splittable) {
-      var words = el.textContent.trim().split(/\s+/), lo = 0, hi = words.length - 1;
-      while (lo < hi) {
-        var mid = Math.ceil((lo + hi) / 2);
-        el.textContent = words.slice(0, mid).join(' ');
-        if (over()) hi = mid - 1; else lo = mid;
+    if (isPlain(el)) {
+      var words = el.textContent.trim().split(/\s+/), L = linesOf(el);
+      if (L >= 4 && words.length > 8) {
+        var fitK = function (maxLines) {
+          var lo = 0, hi = words.length - 1;
+          while (lo < hi) {
+            var mid = Math.ceil((lo + hi) / 2);
+            el.textContent = words.slice(0, mid).join(' ');
+            if (over() || linesOf(el) > maxLines) hi = mid - 1; else lo = mid;
+          }
+          return lo;
+        };
+        var k = fitK(1e9), f = 0;
+        el.textContent = words.slice(0, k).join(' '); if (k > 0) f = linesOf(el);
+        if (k > 0 && L - f < 2) { /* أرملة: نترك للصفحة التالية سطرين على الأقل */
+          var tgt = L - 2;
+          if (tgt >= 2) { k = fitK(tgt); el.textContent = words.slice(0, k).join(' '); f = k > 0 ? linesOf(el) : 0; } else f = 0;
+        }
+        if (f >= 2 && k > 0 && k < words.length) { /* يتيم: لا يُترك سطر واحد في أسفل الصفحة */
+          var rest = mk(el.className, words.slice(k).join(' '), { style: 'margin-top:0' });
+          newPage(); place(rest); return;
+        }
+        el.textContent = words.join(' ');
       }
-      if (lo >= 6) {
-        el.textContent = words.slice(0, lo).join(' ');
-        var rest = mk(el.className, words.slice(lo).join(' '), { style: 'margin-top:0' });
-        newPage(); place(rest); return;
-      }
-      el.textContent = words.join(' ');
     }
     toNext(el);
   }
   newPage();
-  parseBlocks(d).forEach(place);
-  var pages = pagesEl.querySelectorAll('.paper');
-  pages.forEach(function (p, i) { p.querySelector('.pfoot').textContent = 'صفحة | ' + (i + 1); });
-  var tail = pagesEl.querySelector('[data-tail]'), before = -1, fits = true;
-  if (tail) {
-    before = tail.offsetTop;
-    var lc = tail.parentNode.lastElementChild;
-    fits = (lc.offsetTop + lc.offsetHeight + 4) <= tail.parentNode.clientHeight - reserveExtra;
+  var blocks = parseBlocks(d);
+  /* ربط أسطر التوقيع بحسب ارتفاعه الفعلي: القصير (≤24% من الصفحة) كتلة واحدة، والطويل يجوز أن ينقسم بين أسماء
+     بشرط أن يبقى في كل جزء ثلاثة أسطر على الأقل (بدايته مع العنوان، ونهايته مع سطر المحامي) */
+  var sg = blocks.filter(function (b) { return b.hasAttribute && b.hasAttribute('data-sign'); });
+  if (sg.length) {
+    var rowH = (parseFloat(pagesEl.style.getPropertyValue('--fs')) || 18) * 1.05 * lvl.lh, bigSign = (sg.length * rowH + 14) > 0.24 * cur.clientHeight;
+    sg.forEach(function (r, i) {
+      var keep = bigSign ? (i < 2 || i >= sg.length - 3 && i < sg.length - 1) : i < sg.length - 1;
+      if (keep) r.setAttribute('data-keep', 1); else r.removeAttribute('data-keep');
+    });
   }
-  return { n: pages.length, tail: !!tail, before: before, fits: fits };
+  blocks.forEach(place);
+
+  var pages = pagesEl.querySelectorAll('.paper'), fills = [], headingEnd = false, signPages = {}, signAlone = false;
+  pages.forEach(function (p, i) {
+    p.querySelector('.pfoot').textContent = 'صفحة | ' + (i + 1);
+    var b = p.querySelector('.pbody'), l = b.lastElementChild;
+    fills.push(l ? Math.min(1, bottomOfEl(l) / b.clientHeight) : 0);
+    if (l && l.hasAttribute('data-keep') && !l.hasAttribute('data-sign')) headingEnd = true;
+    if (b.querySelector('[data-sign]')) signPages[i] = 1;
+  });
+  if (pages.length > 1) { var fc = pages[pages.length - 1].querySelector('.pbody').firstElementChild; signAlone = !!(fc && fc.hasAttribute('data-sign0')); }
+  return { n: pages.length, fills: fills, headingEnd: headingEnd, signAlone: signAlone, signSplit: Object.keys(signPages).length > 1, hasSign: Object.keys(signPages).length > 0 };
 }
 
+/* التحقق الحرفي: كل حرف في المصدر يظهر بالعدد نفسه في الصفحات (لا حذف ولا تكرار ولا تغيير) */
+var INVIS = /[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\s]/g;
+function charCounts(str) { var m = {}, a = Array.from(str.replace(INVIS, '')); for (var i = 0; i < a.length; i++) m[a[i]] = (m[a[i]] || 0) + 1; return m; }
+function verifyExact(d) {
+  var out = ''; $$('#pages .pbody > *').forEach(function (e) { out += ' ' + textOf(e); });
+  var A = charCounts(d.body + ' ' + d.sign), B = charCounts(out), bad = [], k;
+  for (k in A) if (A[k] !== B[k]) bad.push(k + ':' + A[k] + '→' + (B[k] || 0));
+  for (k in B) if (!(k in A)) bad.push(k + ':0→' + B[k]);
+  return { ok: bad.length === 0, bad: bad.slice(0, 5), words: wordsOf(d.body + ' ' + d.sign) };
+}
 
 function pagesOverflow() { return $$('#pages .pbody').some(function (b) { return b.scrollHeight > b.clientHeight + 0.5; }); }
+/* مستويات ضبط التباعد (تبدأ بإعداد المستخدم نفسه، ولا ينزل التباعد عن 1.45 ولا يتغير الخط أكثر من 3%) */
+var LEVELS = [{ fs: 1, lh: 1 }, { fs: 1, lh: 0.97 }, { fs: 0.99, lh: 0.94 }, { fs: 0.98, lh: 0.91 }, { fs: 0.97, lh: 0.88 }];
+function levelFor(d, L) { var u = parseFloat(d.lh); return { fs: L.fs, lh: Math.min(u, Math.max(1.45, u * L.lh)) }; }
+function layoutCost(r, li) {
+  var c = li * 3, i;
+  for (i = 0; i < r.fills.length - 1; i++) { var b = 1 - r.fills[i]; if (b > 0.09) c += (b - 0.09) * 100; }
+  if (r.n > 1 && r.fills[r.fills.length - 1] < 0.10) c += 12;
+  if (r.signAlone) c += 50;
+  if (r.signSplit) c += 10;
+  if (r.headingEnd) c += 80;
+  return c;
+}
 function paginate() {
   var st = $('status');
   try {
-    var d = get(), best = null, bestS = 1, r;
+    var d = get(), r, bestLi = 0, bestC = 1e9, lastLi = -1, t0 = performance.now();
     reserveExtra = 3;
-    if (d.auto) {
-      for (var s = 1.0; s <= 1.2001; s += 0.02) {
-        r = build(d, s);
-        if (!r.tail) break;
-        if (r.fits && r.before >= 150) { best = r; bestS = s; break; }
-        if (r.fits && (!best || r.before > best.before)) { best = r; bestS = s; }
-      }
+    var lv = d.auto ? LEVELS : [LEVELS[0]];
+    for (var li = 0; li < lv.length; li++) {
+      r = build(d, levelFor(d, lv[li])); lastLi = li;
+      var c = layoutCost(r, li);
+      if (c < bestC) { bestC = c; bestLi = li; }
+      if (c <= 6 || performance.now() - t0 > 2500) break;
     }
-    r = build(d, bestS);
-    for (var vk = 0; vk < 8 && pagesOverflow(); vk++) { reserveExtra += 6; r = build(d, bestS); }
-    var got = 0;
-    $$('#pages .pbody > *').forEach(function (e) { got += wordsOf(textOf(e)); });
-    var okw = got === lastExpected;
-    st.className = 'status' + ((r.fits && okw && !aiNote) ? '' : ' warn');
-    st.textContent = 'عدد الصفحات: ' + r.n + (bestS > 1.001 ? ' · تم ضبط حجم الخط تلقائياً' : '') +
-      (okw ? ' · تم التحقق من وجود كل الكلمات (' + got + ')' : ' · تنبيه: عدد الكلمات في الصفحات (' + got + ') لا يطابق المصدر (' + lastExpected + ')') +
-      (r.fits ? '' : ' · كتلة التوقيع أطول من صفحة') +
+    if (lastLi !== bestLi) r = build(d, levelFor(d, lv[bestLi]));
+    for (var vk = 0; vk < 8 && pagesOverflow(); vk++) { reserveExtra += 6; r = build(d, levelFor(d, lv[bestLi])); }
+    var v = verifyExact(d);
+    if (!v.ok && aiState && aiState.key === d.body.split('\n').map(clean).filter(Boolean).join('\n')) {
+      aiState = null;
+      aiNote = 'تعذّر اعتماد نتيجة التنسيق المتقدم حفاظاً على سلامة النص، فنُسّقت المذكرة بالقواعد الأساسية.';
+      return paginate();
+    }
+    var okp = !pagesOverflow();
+    st.className = 'status' + ((okp && v.ok && !aiNote) ? '' : ' warn');
+    st.textContent = 'عدد الصفحات: ' + r.n + (bestLi > 0 ? ' · ضُبط التباعد قليلاً لتوازن الصفحات' : '') +
+      (v.ok ? ' · تم التحقق من سلامة النص (' + v.words + ' كلمة)' : ' · تنبيه: يوجد اختلاف في الأحرف (' + v.bad.join('، ') + ')') +
+      (okp ? '' : ' · تعذّر ضبط بعض الصفحات') +
       (aiNote ? ' · ' + aiNote : (aiState && aiState.key === d.body.split('\n').map(clean).filter(Boolean).join('\n') ? ' · تنسيق متقدم' + (window.lastAIProvider ? ' (' + window.lastAIProvider + ')' : '') : ''));
     var rb = $('repbody'); rb.innerHTML = '';
     lastReport.forEach(function (x) {
@@ -613,23 +787,57 @@ var API_SAMPLE = {
     return j.result;
   }
 };
-var AI_TYPES = ['bas','court','subject','heading','center','address','closing','item','names_label','name','para','cont','sign_label','sign_name','sign_line'];
+function buildPrompt(rows, a, b, n, ctx) {
+  return [
+    'أنت محرّر قانوني خبير في تنسيق المذكرات والمستندات القانونية والرسمية (بالعربية أو بأي لغة).',
+    'اقرأ المستند أدناه كاملاً وافهم موضوعه وتسلسل أقسامه وحججه، ثم حدّد وظيفة كل سطر في بنية المستند ليُنسَّق تنسيقاً قانونياً احترافياً مقتصداً. لا تعتمد على شكل الترقيم وحده، بل على المعنى والوظيفة.',
+    'لا تعدّل أي نص ولا تعد كتابته ولا تدمج أسطراً؛ المطلوب نوع كل سطر فقط.',
+    '',
+    'الأنواع المسموحة (استخدمها حرفياً):',
+    'bas = البسملة | court = سطر الجهة المخاطَبة في الترويسة (محكمة أو نيابة أو لجنة) | subject = سطر الموضوع أو عنوان المذكرة',
+    'h1 = عنوان قسم رئيسي (مثل: الوقائع، أسباب الطعن، أولاً:، في الشكل، في الموضوع، الطلبات)',
+    'h2 = عنوان فرعي تحت قسم رئيسي (مثل: ١- أو أ- عندما يكون عنواناً قصيراً لما يليه من فقرات)',
+    'para = فقرة نصية عادية (وقائع أو حجة أو شرح)، حتى لو بدأت برقم أو كانت طويلة',
+    'item = بند في قائمة (طلبات أو نقاط أو مستندات)، جملة أو جملتان قائمة بذاتها',
+    'subitem = بند فرعي داخل بند',
+    'quote = نص مادة قانونية أو حكم أو عبارة منقولة حرفياً؛ استخدمه فقط عند الوضوح',
+    'address = توجيه الخطاب للقاضي أو الجهة والتحية (صاحب الفضيلة…، السلام عليكم…)',
+    'center = سطر قصير يوضع في الوسط (نادر)',
+    'closing = عبارة ختام ودعاء قبل التوقيع (وفقكم الله…)',
+    'names_label = سطر يسبق قائمة أسماء أشخاص | name = اسم شخص ضمن قائمة أسماء',
+    'sign_label = عنوان كتلة التوقيع | sign_name = اسم موقّع | sign_line = سطر آخر ضمن التوقيع (مثل: عنهم المحامي / فلان)',
+    'cont = سطر يكمل السطر السابق بسبب كسر سطر خاطئ ولا يبدأ فقرة جديدة',
+    '',
+    'قواعد الحكم:',
+    '1) العنوان قصير (غالباً أقل من 100 حرف)، يمهّد لما بعده، وغالباً بلا نقطة ختامية. السطر الطويل الذي يشرح أو يحتج فهو para أو item ولو بدأ بترقيم.',
+    '2) حافظ على اتساق المستويات: نمط الترقيم نفسه في المستوى نفسه يأخذ النوع نفسه في كل المستند. ولا تُكثر العناوين، فالتنسيق مقتصد.',
+    '3) h2 لا يأتي إلا تحت h1. وإن كانت كل عناوين المستند من مستوى واحد فاجعلها h1.',
+    '4) قائمة أسماء المقدّمين في أول المستند: names_label ثم name لكل اسم، وهي ليست توقيعاً.',
+    '5) التوقيع في آخر المستند فقط، متصلاً حتى آخر سطر، ويسبقه closing إن وُجد.',
+    '6) الترويسة (bas وcourt) في أول السطور فقط.',
+    '6.5) إن رأيت عدة أسطر متتالية متقاربة الطول لا تنتهي بنقطة أو علامة ختام فهي غالباً فقرة واحدة كُسرت أسطرها عند اللصق: صنّف أولها para والبقية cont، ولا تجعل أيّاً منها عنواناً. والسطر الذي يزيد على 120 حرفاً لا يكون عنواناً أبداً.',
+    '7) لا تتجاهل العناوين غير المنسّقة: أي سطر قصير بلا نقطة ختامية يلخّص موضوع الفقرات التي بعده فهو عنوان (h1 أو h2 بحسب موضعه في التسلسل) ولو لم يكن مرقّماً أو مميّزاً. لكن لا تعدّ جملة كاملة عنواناً.',
+    '',
+    'أجب بمصفوفة JSON واحدة فقط، بلا شرح ولا علامات ```، عناصرها نصوص بالشكل "الرقم:النوع" لكل سطر بالترتيب وبلا نقص. هذا مثال لشكل الإجابة فقط: ["0:bas","1:court","2:subject","3:para","4:h1","5:para","6:item"]',
+    ctx || '',
+    'أسطر المستند (' + a + ' إلى ' + (b - 1) + ' من أصل ' + n + ')؛ الرقم ثم [الطول] ثم النص كاملاً:',
+    rows.join('\n')
+  ].join('\n');
+}
 async function runAI() {
   var st = $('status');
   if (aiBusy) return;
   var d = get(), lines = d.body.split('\n').map(clean).filter(Boolean);
   if (!lines.length) return;
-  showModal('busy', 'جارٍ التنسيق…', 'نحلّل بنية مذكرتك ونوزّعها على الصفحات');
-  var sample = null;
-  sample = API_SAMPLE;
-  if (!sample) { aiNote = 'التنسيق المتقدم غير متاح هنا — يعمل التصنيف بالقواعد الثابتة.'; paginate(); doneModal(); return; }
-  var ckey = 'memo_ai_' + hashLines(lines);
+  showModal('busy', 'جارٍ التنسيق…', 'نقرأ المذكرة كاملة ونحدّد بنيتها');
+  var sample = API_SAMPLE;
+  var ckey = 'memo_ai3_' + hashLines(lines);
   try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.length === lines.length) { aiState = { key: lines.join('\n'), types: cv }; aiNote = ''; window.lastAIProvider = '•'; paginate(); doneModal(); return; } } catch (e) {}
   aiBusy = true; setBusy(true);
   var types = new Array(lines.length), chunks = [], cs = 0, cl = 0;
   for (var q = 0; q < lines.length; q++) {
     cl += lines[q].length + 12;
-    if (q > cs && (cl > 30000 || q - cs >= 300)) { chunks.push([cs, q]); cs = q; cl = lines[q].length + 12; }
+    if (q > cs && (cl > 36000 || q - cs >= 400)) { chunks.push([cs, q]); cs = q; cl = lines[q].length + 12; }
   }
   chunks.push([cs, lines.length]);
   try {
@@ -638,32 +846,24 @@ async function runAI() {
       st.className = 'status'; st.textContent = 'جارٍ تحليل بنية المذكرة (' + b + ' / ' + lines.length + ')';
       $('mtext').textContent = 'تحليل الأسطر: ' + b + ' من ' + lines.length;
       var rows = [];
-      for (var i = a; i < b; i++) {
-        var t = lines[i], view = t;
-        rows.push(i + ' [' + t.length + '] ' + view);
+      for (var i = a; i < b; i++) rows.push(i + ' [' + lines[i].length + '] ' + lines[i]);
+      var ctx = '';
+      if (ci > 0) {
+        var pv = [], hs = [], z;
+        for (z = Math.max(0, a - 6); z < a; z++) pv.push(z + ' [' + lines[z].length + '] ' + lines[z].slice(0, 90) + ' => ' + (types[z] || 'para'));
+        for (z = 0; z < a; z++) if (types[z] === 'h1' || types[z] === 'h2') hs.push(types[z] + ': ' + lines[z].slice(0, 50));
+        ctx = 'هذا جزء لاحق من المستند نفسه. للسياق فقط (لا تصنّفه): آخر أسطر الجزء السابق مع أنواعها:\n' + pv.join('\n') +
+          (hs.length ? '\nالعناوين السابقة (آخرها): ' + hs.slice(-8).join(' | ') : '') + '\nاستمر على المنهج والمستويات نفسها.\n';
       }
-      var prompt = 'أنت مصنِّف لبنية المستندات القانونية والرسمية (مذكرات، لوائح، شكاوى، عقود…) بأي أسلوب كتابة وبأي لغة.\n' +
-        'أمامك أسطر مستند مرقّمة (' + a + ' إلى ' + (b - 1) + ' من أصل ' + lines.length + ' سطراً). الرقم ثم [طول السطر] ثم السطر (كاملاً).\n' +
-        'مهمتك الوحيدة: تحديد نوع كل سطر بحسب وظيفته في المستند، دون إعادة كتابة أي نص.\n' +
-        'الأنواع المسموحة فقط:\n' +
-        'bas = البسملة؛ court = سطر الجهة/المحكمة المخاطَبة في الترويسة؛ subject = سطر الموضوع؛\n' +
-        'heading = عنوان قسم أو ترقيم قسم (مثل: أولاً / ثانياً / الطلبات / الوقائع / أسباب الطعن)، قصير ويسبق فقرات؛\n' +
-        'center = سطر يُوضع في الوسط (تحية، عبارة تقديم قصيرة)؛ address = توجيه الخطاب للقاضي أو الجهة، أو التحية؛\n' +
-        'closing = عبارة ختام ودعاء قبل التوقيع؛ item = بند مرقّم أو منقّط (مثل ١) أو - أو أ-)؛\n' +
-        'names_label = سطر يسبق قائمة أسماء أشخاص (ينتهي غالباً بنقطتين)؛ name = اسم شخص ضمن قائمة أسماء؛\n' +
-        'para = فقرة نصية عادية؛ cont = سطر يكمل السطر السابق في نفس الفقرة (انقسم بسبب كسر سطر وهو لا يبدأ فقرة جديدة)؛\n' +
-        'sign_label = عنوان كتلة التوقيع (مثل: مقدمو المذكرة:)؛ sign_name = اسم موقّع؛ sign_line = أي سطر آخر ضمن التوقيع (مثل: عنهم المحامي / فلان).\n' +
-        'قواعد: التوقيع يكون في نهاية المستند فقط. قائمة الأسماء في أول المستند (المقدّمون) ليست توقيعاً بل names_label ثم name. السطر الطويل الذي هو شرح أو حجة فهو para.\n' +
-        'أجب بمصفوفة JSON واحدة فقط (بدون أي شرح أو علامات ```) عناصرها نصوص بالشكل "الرقم:النوع" وبنفس ترتيب الأسطر وبدون أي سطر ناقص، مثال: ["0:bas","1:court","2:subject"].\n\n' +
-        rows.join('\n');
-      var arr = await sample.json(prompt, { modelTier: 'default' });
+      var arr = await sample.json(buildPrompt(rows, a, b, lines.length, ctx), { modelTier: 'default' });
       if (!Array.isArray(arr)) throw { code: 'bad_format', message: 'صيغة غير متوقعة' };
       arr.forEach(function (x) {
-        var m = String(x).match(/^\s*(\d+)\s*:\s*([a-z_]+)\s*$/);
-        if (m && +m[1] >= a && +m[1] < b && AI_TYPES.indexOf(m[2]) > -1) types[+m[1]] = m[2];
+        var m = String(x).match(/^\s*(\d+)\s*:\s*([a-z_0-9]+)\s*$/);
+        if (m && +m[1] >= a && +m[1] < b && AI_VALID[m[2]]) types[+m[1]] = m[2];
       });
     }
     for (var k = 0; k < types.length; k++) if (!types[k]) types[k] = 'para';
+    types = sanitizeTypes(lines, types);
     aiState = { key: lines.join('\n'), types: types }; aiNote = '';
     try { localStorage.setItem(ckey, JSON.stringify(types)); } catch (e) {}
   } catch (e) {
