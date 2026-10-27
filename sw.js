@@ -1,5 +1,5 @@
 /* عامل الخدمة: يجعل الموقع يعمل كتطبيق ويفتح دون إنترنت (الواجهة والتنسيق بالقواعد وتنزيل PDF) */
-const VERSION = 'memo-v4';
+const VERSION = 'memo-v5';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/html2canvas.min.js', '/jspdf.umd.min.js'];
 
 self.addEventListener('install', (e) => {
