@@ -465,7 +465,7 @@ function sanitizeTypes(lines, types, mods) {
       i = e + 1;
     } else i++;
   }
-  harmonizeHeadings(lines, T);
+  /* harmonizeHeadings(lines, T);*/
   var seenH1 = false, seenItem = false;
   for (i = 0; i < n; i++) {
     if (T[i] === 'h1') { seenH1 = true; seenItem = false; }
