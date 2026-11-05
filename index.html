@@ -1032,8 +1032,6 @@ async function runAI() {
   if (!lines.length) return;
   showModal('busy', 'جارٍ التنسيق…', 'نقرأ المذكرة كاملة ونحدّد بنيتها');
   var sample = API_SAMPLE;
-  var ckey = 'memo_ai4_' + hashLines(lines.concat(['#' + (d.note || '')]));
-  try { var cv = JSON.parse(localStorage.getItem(ckey) || 'null'); if (cv && cv.t && cv.t.length === lines.length) { aiState = { key: lines.join('\n'), types: cv.t, mods: cv.m }; aiNote = ''; window.lastAIProvider = '•'; paginate(); doneModal(); return; } } catch (e) {}
   aiBusy = true; setBusy(true);
   var types = new Array(lines.length), mods = new Array(lines.length), chunks = [], cs = 0, cl = 0;
   for (var q = 0; q < lines.length; q++) {
