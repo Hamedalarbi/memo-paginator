@@ -117,8 +117,8 @@ export default async function handler(req, res) {
   const prompt = req.body && req.body.prompt;
   if (typeof prompt !== 'string' || prompt.length < 10 || prompt.length > 100000) return res.status(400).json({ error: 'bad_prompt' });
 
-  const ck = hash(prompt);
-  if (cache.has(ck)) return res.status(200).json({ ...cache.get(ck), cached: true });
+ // const ck = hash(prompt);
+//  if (cache.has(ck)) return res.status(200).json({ ...cache.get(ck), cached: true });
 
   const chain = (process.env.CHAIN || 'gemini,groq,mistral').split(',').map(s => s.trim()).filter(p => PROVIDERS[p] && process.env[PROVIDERS[p].key]);
   if (!chain.length) return res.status(500).json({ error: 'server_not_configured', detail: 'لا يوجد أي مفتاح ذكاء اصطناعي مضبوط في Vercel' });
@@ -128,8 +128,8 @@ export default async function handler(req, res) {
     try {
       const o = await PROVIDERS[p].run(prompt);
       const out = { result: extractArray(o.text), provider: p, model: o.model };
-      if (cache.size > 200) cache.delete(cache.keys().next().value);
-      cache.set(ck, out);
+   //   if (cache.size > 200) cache.delete(cache.keys().next().value);
+    //  cache.set(ck, out);
       return res.status(200).json(out);
     } catch (e) { errors.push(p + ': ' + String(e && e.message || e).slice(0, 140)); }
   }
