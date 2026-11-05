@@ -435,12 +435,27 @@ function harmonizeHeadings(lines, T) {
     else if (/[:：]\s*$/.test(L2) && L2.split(/\s+/).length <= 12) { T[i] = seen ? 'h2' : 'h1'; seen = true; }
   }
 }
+
 function sanitizeTypes(lines, types, mods) {
   var n = lines.length, T = [], i, t, len;
-  for (i = 0; i < n; i++) { t = types[i]; if (!AI_VALID[t]) t = 'para'; if (t === 'heading') t = 'h1'; if (t === 'court') t = 'head'; T.push(t); }
-  var SHORT = { center: 1, address: 1, closing: 1, names_label: 1, name: 1, sign_label: 1, sign_name: 1, sign_line: 1, bas: 1 };
+
   for (i = 0; i < n; i++) {
-    t = T[i]; len = lines[i].length;
+    t = types[i];
+    if (!AI_VALID[t]) t = 'para';
+    if (t === 'heading') t = 'h1';
+    if (t === 'court') t = 'head';
+    T.push(t);
+  }
+
+  var SHORT = {
+    center: 1, address: 1, closing: 1, names_label: 1,
+    name: 1, sign_label: 1, sign_name: 1, sign_line: 1, bas: 1
+  };
+
+  for (i = 0; i < n; i++) {
+    t = T[i];
+    len = lines[i].length;
+
     if ((t === 'h1' || t === 'h2') && (len > 120 || (len > 90 && /[.؟!]\s*$/.test(lines[i])))) T[i] = 'para';
     else if (t === 'head' && len > 120) T[i] = 'para';
     else if (t === 'title' && len > 100) T[i] = 'para';
@@ -448,47 +463,141 @@ function sanitizeTypes(lines, types, mods) {
     else if (t === 'subject' && len > 240) T[i] = 'para';
     else if (SHORT[t] && len > 200) T[i] = 'para';
   }
+
   var seenB = false, hc = 0;
+
   for (i = 0; i < n; i++) {
-    if (T[i] === 'bas') { if (seenB || i > 8) T[i] = 'para'; else seenB = true; }
-    if (T[i] === 'head') { if (i <= 12 && hc < 6) hc++; else T[i] = lines[i].length <= 100 ? 'center' : 'para'; }
+    if (T[i] === 'bas') {
+      if (seenB || i > 8) T[i] = 'para';
+      else seenB = true;
+    }
+
+    if (T[i] === 'head') {
+      if (i <= 12 && hc < 6) hc++;
+      else T[i] = lines[i].length <= 100 ? 'center' : 'para';
+    }
   }
-  var j = n - 1; while (j >= 0 && /^sign_/.test(T[j])) j--;
+
+  /* اكتشاف كتلة التوقيع حتى لو أخطأ الذكاء الاصطناعي في تصنيف بعض أسطرها */
+  var marker = -1;
+  var from = Math.max(0, n - 18);
+
+  for (i = from; i < n; i++) {
+    if (R.sig.test(norm(lines[i]))) {
+      var validSign = true;
+
+      for (var k = i; k < n; k++) {
+        if (lines[k].length > 100) {
+          validSign = false;
+          break;
+        }
+      }
+
+      if (validSign) marker = i;
+    }
+  }
+
+  /* تحويل الأسطر التابعة للتوقيع إلى أنواع التوقيع */
+  if (marker >= 0) {
+    for (i = marker; i < n; i++) {
+      T[i] = R.close.test(norm(lines[i])) ? 'closing' : 'sign_auto';
+    }
+  }
+
+  /* السماح بوجود عبارة ختامية بعد أسطر التوقيع */
+  var j = n - 1;
+
+  while (j >= 0 && T[j] === 'closing') j--;
+  while (j >= 0 && /^sign_/.test(T[j])) j--;
+
   var firstSign = j + 1;
-  for (i = 0; i < firstSign; i++) if (/^sign_/.test(T[i])) T[i] = (T[i] === 'sign_name') ? 'name' : 'para';
-  if (n - firstSign > 40) for (i = firstSign; i < n; i++) T[i] = 'para';
+
+  for (i = 0; i < firstSign; i++) {
+    if (/^sign_/.test(T[i])) {
+      T[i] = (T[i] === 'sign_name') ? 'name' : 'para';
+    }
+  }
+
+  if (n - firstSign > 40) {
+    for (i = firstSign; i < n; i++) T[i] = 'para';
+  }
+
   /* ثلاثة أسطر متتالية أو أكثر من نوع «عنوان» هي في الغالب فقرة واحدة مكسورة الأسطر، لا عناوين: نعيدها فقرة ونصل أسطرها */
   for (i = 0; i < n;) {
     if (T[i] === 'h1' || T[i] === 'h2') {
-      var e = i; while (e + 1 < n && (T[e + 1] === 'h1' || T[e + 1] === 'h2')) e++;
-      if (e - i + 1 >= 3) { T[i] = 'para'; for (var k2 = i + 1; k2 <= e; k2++) T[k2] = /[.؟?!:؛]\s*$/.test(lines[k2 - 1]) ? 'para' : 'cont'; }
+      var e = i;
+      while (e + 1 < n && (T[e + 1] === 'h1' || T[e + 1] === 'h2')) e++;
+
+      if (e - i + 1 >= 3) {
+        T[i] = 'para';
+        for (var k2 = i + 1; k2 <= e; k2++) {
+          T[k2] = /[.؟?!:؛]\s*$/.test(lines[k2 - 1]) ? 'para' : 'cont';
+        }
+      }
+
       i = e + 1;
     } else i++;
   }
+
   /* harmonizeHeadings(lines, T);*/
   var seenH1 = false, seenItem = false;
+
   for (i = 0; i < n; i++) {
-    if (T[i] === 'h1') { seenH1 = true; seenItem = false; }
-    else if (T[i] === 'h2' && !seenH1) { T[i] = 'h1'; seenH1 = true; }
+    if (T[i] === 'h1') {
+      seenH1 = true;
+      seenItem = false;
+    }
+    else if (T[i] === 'h2' && !seenH1) {
+      T[i] = 'h1';
+      seenH1 = true;
+    }
+
     if (T[i] === 'item') seenItem = true;
-    else if (T[i] === 'subitem' && !seenItem) { T[i] = 'item'; seenItem = true; }
+    else if (T[i] === 'subitem' && !seenItem) {
+      T[i] = 'item';
+      seenItem = true;
+    }
   }
-  /* صفات التنسيق الاختيارية (وسط/يمين/يسار/عريض/عادي/تسطير) تُقبل على الأسطر القصيرة فقط، ولا تُقبل أبداً على الفقرات والبنود: النص العادي يبقى عادياً */
-  var MODROLE = { bas: 1, head: 1, title: 1, subject: 1, field: 1, h1: 1, h2: 1, address: 1, center: 1, closing: 1, names_label: 1 };
+
+  /* صفات التنسيق الاختيارية */
+  var MODROLE = {
+    bas: 1, head: 1, title: 1, subject: 1, field: 1,
+    h1: 1, h2: 1, address: 1, center: 1,
+    closing: 1, names_label: 1
+  };
+
   var M = [];
+
   for (i = 0; i < n; i++) {
     var ms = (mods && mods[i]) || [], ok = [];
+
     if (MODROLE[T[i]] && lines[i].length <= 140) {
-      for (var mi = 0; mi < ms.length; mi++) if (MOD_OK[ms[mi]] && ok.indexOf(ms[mi]) === -1) ok.push(ms[mi]);
-      var al = ok.filter(function (m) { return m === 'c' || m === 'r' || m === 'l'; });
-      if (al.length > 1) ok = ok.filter(function (m) { return (m !== 'c' && m !== 'r' && m !== 'l') || m === al[0]; });
-      if (ok.indexOf('b') > -1 && ok.indexOf('n') > -1) ok = ok.filter(function (m) { return m !== 'n'; });
+      for (var mi = 0; mi < ms.length; mi++) {
+        if (MOD_OK[ms[mi]] && ok.indexOf(ms[mi]) === -1) ok.push(ms[mi]);
+      }
+
+      var al = ok.filter(function (m) {
+        return m === 'c' || m === 'r' || m === 'l';
+      });
+
+      if (al.length > 1) {
+        ok = ok.filter(function (m) {
+          return (m !== 'c' && m !== 'r' && m !== 'l') || m === al[0];
+        });
+      }
+
+      if (ok.indexOf('b') > -1 && ok.indexOf('n') > -1) {
+        ok = ok.filter(function (m) { return m !== 'n'; });
+      }
     }
+
     M.push(ok);
   }
+
   T.mods = M;
   return T;
 }
+
 function signRows(sl, slt, manual) {
   var rows = [];
   sl.forEach(function (x, ix) {
